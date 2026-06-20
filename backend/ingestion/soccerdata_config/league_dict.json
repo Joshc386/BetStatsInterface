@@ -1,0 +1,18 @@
+{
+    "ENG-Championship": {
+        "MatchHistory": "E1",
+        "FBref": "Championship",
+        "season_start": "Aug",
+        "season_end": "May"
+    },
+    "ENG-League One": {
+        "MatchHistory": "E2",
+        "season_start": "Aug",
+        "season_end": "May"
+    },
+    "ENG-League Two": {
+        "MatchHistory": "E3",
+        "season_start": "Aug",
+        "season_end": "May"
+    }
+}

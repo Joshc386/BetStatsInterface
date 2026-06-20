@@ -26,11 +26,10 @@ Personal, single-user web app for **betting research**. Ingests free football da
 ## Data-source rules
 
 **Source-per-scope (strict)** — source per *data type*, not per provider (see `docs/adr/0001`):
-- `club_league` team data (event-counts) → **football-data.co.uk** (no rate limit, deep history, league-only).
+- `club_league` team data (event-counts) → **football-data.co.uk**, read via **direct CSV** (`ingestion/fdcouk.py`), not soccerdata — its TLS downloader proved flaky and the spec sanctions direct CSV. No rate limit, deep history, league-only.
 - `club_cup` / `club_european` / `international` team data → **FBref** (football-data.co.uk does NOT cover cups).
 - **All** player event-count data, every scope → **FBref** (shots, SoT, tackles, fouls, cards, minutes, goals, assists).
-- **Team xG**, every scope → **FotMob** (`FotMob.read_team_match_stats`). FBref lost xG in Jan 2026 (Opta feed terminated).
-- **Player xG** → **none in v1**; `player_match.xg` stays NULL. A FotMob player-xG ingestion path is kept open for later (ingestion-layer only, never request-time).
+- **xG (team + player)** → **deferred out of v1**; `team_match.xg` / `player_match.xg` stay NULL (see `docs/adr/0002`). FBref lost xG (Jan 2026); soccerdata 1.9.0 removed FotMob. Documented future path: Understat, **Premier League only** (top-5 leagues), ingestion-layer only.
 - **Schedule / upcoming Fixtures** → **FBref `read_schedule`** (its `fbref_match_id` aligns with the match-stat pages, keeping incremental dedup clean). ESPN is fallback only.
 
 **v1 scope:** top 4 English tiers (Premier League, Championship, League One, League Two), `club_league` only. Team data confident across all four; player data best-effort + labelled for League One / Two.
@@ -88,14 +87,20 @@ python -m venv .venv
 .venv/Scripts/python.exe -m alembic revision -m "msg"       # new migration
 .venv/Scripts/python.exe -m alembic downgrade -1            # roll back one
 
+# reference data (Phase 2 — idempotent, re-runnable)
+.venv/Scripts/python.exe -m ingestion.config_sync          # sync league_dict -> ~/soccerdata
+.venv/Scripts/python.exe -m ingestion.seed_competitions    # 4 competitions
+.venv/Scripts/python.exe -m ingestion.teams                # canonical teams from football-data.co.uk
+
+# quality
+.venv/Scripts/python.exe -m pytest                         # tests
+
 # dev  (TODO — added in later phases)
 # backend dev server  -> uvicorn app.main:app --reload   (Phase 6: API)
 # frontend dev server -> npm run dev                     (Phases 7-8: Next.js)
 
 # ingestion  (TODO — Phases 3-5)
-# historical backfill (run once) / nightly incremental / roster refresh
-
-# quality  (TODO — test/lint/typecheck tooling not yet configured)
+# team-match backfill / player-match backfill / nightly incremental / roster refresh
 ```
 
 ---

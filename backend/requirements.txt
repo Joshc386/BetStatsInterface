@@ -13,5 +13,8 @@ pydantic-settings>=2.2
 python-dotenv>=1.0
 
 # Ingestion
-soccerdata>=1.8
+soccerdata==1.9.0  # pinned: 1.9.0 removed the FotMob reader (see docs/adr/0002)
 pandas>=2.0
+
+# Dev / test
+pytest>=8.0

@@ -6,7 +6,7 @@ reconcile FBref / football-data.co.uk / FotMob source names to one canonical id.
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, SmallInteger, Text
+from sqlalchemy import ForeignKey, Index, SmallInteger, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -25,6 +25,8 @@ class Competition(Base):
     fdcouk_key: Mapped[str | None] = mapped_column(Text)
     fotmob_id: Mapped[str | None] = mapped_column(Text)
 
+    __table_args__ = (UniqueConstraint("name", name="uq_competitions_name"),)
+
 
 class Team(Base):
     __tablename__ = "teams"
@@ -37,6 +39,17 @@ class Team(Base):
     fdcouk_name: Mapped[str | None] = mapped_column(Text)
     fotmob_id: Mapped[str | None] = mapped_column(Text, unique=True)
     espn_id: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("canonical_name", name="uq_teams_canonical_name"),
+        # One canonical team per football-data.co.uk display name (when present).
+        Index(
+            "uq_teams_fdcouk_name",
+            "fdcouk_name",
+            unique=True,
+            postgresql_where=text("fdcouk_name IS NOT NULL"),
+        ),
+    )
 
 
 class Player(Base):
