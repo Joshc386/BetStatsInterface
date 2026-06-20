@@ -1,0 +1,17 @@
+# API
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# DB / ORM / migrations
+SQLAlchemy>=2.0
+alembic>=1.13
+psycopg2-binary>=2.9
+
+# Config / models
+pydantic>=2.6
+pydantic-settings>=2.2
+python-dotenv>=1.0
+
+# Ingestion
+soccerdata>=1.8
+pandas>=2.0

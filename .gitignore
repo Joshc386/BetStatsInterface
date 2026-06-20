@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Env / secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# soccerdata local cache (large, regenerable; default lives in ~/soccerdata)
+soccerdata_data/
+
+# Node / Next.js (frontend, later phases)
+node_modules/
+.next/
+out/
+frontend/.env*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
