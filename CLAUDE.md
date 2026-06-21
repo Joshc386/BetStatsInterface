@@ -92,6 +92,9 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.seed_competitions    # 4 competitions
 .venv/Scripts/python.exe -m ingestion.teams                # canonical teams from football-data.co.uk
 
+# team-match data (Phase 3 — football-data.co.uk, idempotent)
+.venv/Scripts/python.exe -m ingestion.team_match           # backfill team_match (6 seasons x 4 leagues)
+
 # quality
 .venv/Scripts/python.exe -m pytest                         # tests
 
@@ -99,8 +102,8 @@ python -m venv .venv
 # backend dev server  -> uvicorn app.main:app --reload   (Phase 6: API)
 # frontend dev server -> npm run dev                     (Phases 7-8: Next.js)
 
-# ingestion  (TODO — Phases 3-5)
-# team-match backfill / player-match backfill / nightly incremental / roster refresh
+# ingestion  (TODO — Phases 4-5)
+# player-match backfill (FBref) / nightly incremental / roster refresh
 ```
 
 ---
