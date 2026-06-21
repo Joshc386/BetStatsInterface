@@ -98,9 +98,9 @@ python -m venv .venv
 # quality
 .venv/Scripts/python.exe -m pytest                         # tests
 
-# dev  (TODO — added in later phases)
-# backend dev server  -> uvicorn app.main:app --reload   (Phase 6: API)
-# frontend dev server -> npm run dev                     (Phases 7-8: Next.js)
+# dev
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload   # API at /docs
+# frontend dev server -> npm run dev                         (Phases 7-8: Next.js)
 
 # ingestion  (TODO — Phases 4-5)
 # player-match backfill (FBref) / nightly incremental / roster refresh
