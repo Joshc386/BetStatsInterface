@@ -1,6 +1,6 @@
 """Regression tests for the Summary Metric computation (needs team data loaded)."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import SessionLocal
 from app.models.facts import TeamMatch
@@ -44,5 +44,24 @@ def test_going_in_excludes_latest_and_hitrate_is_bounded():
         hr = entity_summary(s, entity="team", entity_id=tid, metric="corners", n=10,
                             threshold=5)["hit_rate"]
         assert hr["n"] == 10 and 0 <= hr["hits"] <= 10
+    finally:
+        s.close()
+
+
+def test_competition_filter_narrows_to_a_single_competition():
+    s = SessionLocal()
+    try:
+        # a team that has played in more than one competition
+        tid, _ = s.execute(
+            select(TeamMatch.team_id, func.count(func.distinct(TeamMatch.competition_id)))
+            .group_by(TeamMatch.team_id)
+            .order_by(func.count(func.distinct(TeamMatch.competition_id)).desc())
+            .limit(1)
+        ).first()
+        comp = s.scalar(select(TeamMatch.competition_id).where(TeamMatch.team_id == tid).limit(1))
+        all_comp = entity_summary(s, entity="team", entity_id=tid, metric="total_goals", n=500)
+        one_comp = entity_summary(s, entity="team", entity_id=tid, metric="total_goals", n=500,
+                                  competition_id=comp)
+        assert 0 < one_comp["games"] < all_comp["games"]  # strictly narrower
     finally:
         s.close()

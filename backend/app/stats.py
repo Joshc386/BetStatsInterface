@@ -55,7 +55,8 @@ def entity_summary(
     entity_id: int,
     metric: str,
     n: int = 10,
-    scope: str = "club_league",
+    competition_id: int | None = None,  # a specific competition; None = all competitions
+    scope: str | None = None,  # optional coarser filter by competition_type
     seasons: list[str] | None = None,
     threshold: float | None = None,
     direction: str = "over",
@@ -76,18 +77,28 @@ def entity_summary(
     if entity == "player":
         cols.append(table.minutes.label("minutes"))
 
+    conds = [id_col == entity_id]
+    if competition_id is not None:
+        conds.append(table.competition_id == competition_id)
+    if scope is not None:
+        conds.append(table.competition_type == scope)
+    comp_label = (
+        f"competition={competition_id}" if competition_id is not None
+        else (f"scope={scope}" if scope is not None else "all competitions")
+    )
+
     q = (
         select(*cols)
         .join(opp, opp.id == table.opponent_id)
-        .where(id_col == entity_id, table.competition_type == scope)
+        .where(*conds)
         .order_by(table.date.desc())
     )
     if seasons:
         q = q.where(table.season.in_(seasons))
-        window = f"seasons={seasons} scope={scope}"
+        window = f"seasons={seasons} · {comp_label}"
     else:
         q = q.offset(1 if window_mode == "going_in" else 0).limit(n)
-        window = f"last {n} ({window_mode}) scope={scope}"
+        window = f"last {n} ({window_mode}) · {comp_label}"
 
     rows = list(session.execute(q).all())[::-1]  # chronological
     games = len(rows)
@@ -130,7 +141,7 @@ def entity_summary(
         "entity_id": entity_id,
         "entity_name": name,
         "metric": metric,
-        "scope": scope,
+        "scope": comp_label,
         "window": window,
         "games": games,
         "total": total,

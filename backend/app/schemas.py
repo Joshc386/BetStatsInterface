@@ -46,6 +46,13 @@ class SearchHit(BaseModel):
     name: str
 
 
+class CompetitionOut(BaseModel):
+    id: int
+    name: str
+    type: str
+    tier: int | None
+
+
 class H2HRow(BaseModel):
     date: dt.datetime
     season: str
