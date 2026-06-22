@@ -156,9 +156,11 @@ class PlayerMatch(Base):
     is_home: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     minutes: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    goals: Mapped[int | None] = mapped_column(SmallInteger)
+    assists: Mapped[int | None] = mapped_column(SmallInteger)
     shots: Mapped[int | None] = mapped_column(SmallInteger)
     sot: Mapped[int | None] = mapped_column(SmallInteger)
-    tackles: Mapped[int | None] = mapped_column(SmallInteger)
+    tackles: Mapped[int | None] = mapped_column(SmallInteger)  # FBref TklW (tackles won)
     fouls_drawn: Mapped[int | None] = mapped_column(SmallInteger)
     fouls_committed: Mapped[int | None] = mapped_column(SmallInteger)
     yellows: Mapped[int | None] = mapped_column(SmallInteger)

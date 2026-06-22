@@ -19,6 +19,10 @@ env/
 # soccerdata local cache (large, regenerable; default lives in ~/soccerdata)
 soccerdata_data/
 
+# seleniumbase / undetected-chromedriver scratch (FBref scraping)
+downloaded_files/
+*/downloaded_files/
+
 # Node / Next.js (frontend, later phases)
 node_modules/
 .next/
