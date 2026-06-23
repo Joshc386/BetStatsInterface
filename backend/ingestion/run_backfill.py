@@ -24,8 +24,8 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.models.facts import Fixture, PlayerMatch
 from app.models.reference import Competition
-from ingestion.players import _pending_fixtures
 
 STALL = 240  # seconds of log silence => assume the session hung (normal match ~15s)
 POLL = 15
@@ -35,11 +35,34 @@ _LOG = Path(__file__).resolve().parent.parent / "backfill.log"
 
 
 def _pending(season: str, competition_name: str = "Premier League") -> int:
+    """Finished fixtures for this competition-season with no player_match rows.
+
+    Deliberately link-INDEPENDENT (does not require fbref_match_id): the FBref
+    linking happens inside backfill_season, so a fresh season has 0 linked
+    fixtures up front. Counting by "finished and missing player data" lets the
+    watchdog trigger the first run; backfill_season links + ingests from there.
+    """
     with SessionLocal() as session:
         comp = session.scalar(
             select(Competition).where(Competition.name == competition_name)
         )
-        return len(_pending_fixtures(session, comp, season))
+        rows = session.execute(
+            select(Fixture.id).where(
+                Fixture.competition_id == comp.id,
+                Fixture.season == season,
+                Fixture.status == "finished",
+            )
+        ).all()
+        return sum(
+            1
+            for (fixture_id,) in rows
+            if session.scalar(
+                select(PlayerMatch.id)
+                .where(PlayerMatch.fixture_id == fixture_id)
+                .limit(1)
+            )
+            is None
+        )
 
 
 def _kill(proc: subprocess.Popen) -> None:
@@ -53,7 +76,8 @@ def _kill(proc: subprocess.Popen) -> None:
 
 def run(season: str = "2526") -> int:
     pending = _pending(season)
-    print(f"[watchdog] {season}: {pending} matches pending at start", flush=True)
+    print(f"[watchdog] {season}: {pending} fixtures need player data at start",
+          flush=True)
 
     for attempt in range(1, MAX_RESTARTS + 1):
         if pending == 0:
@@ -71,6 +95,7 @@ def run(season: str = "2526") -> int:
             )
 
         # Supervise: restart if the log file stops growing for STALL seconds.
+        stalled = False
         while proc.poll() is None:
             time.sleep(POLL)
             idle = time.time() - _LOG.stat().st_mtime
@@ -79,15 +104,24 @@ def run(season: str = "2526") -> int:
                       flush=True)
                 _kill(proc)
                 proc.wait()
+                stalled = True
                 break
-        else:
+        if not stalled:
             print(f"[watchdog] backfill exited (code {proc.returncode})", flush=True)
 
         time.sleep(3)
-        pending = _pending(season)
+        new_pending = _pending(season)
+        # A clean exit that made no progress means the remaining fixtures have no
+        # fetchable FBref match — don't spin restarts on them.
+        if not stalled and new_pending >= pending:
+            print(f"[watchdog] clean exit, no progress ({new_pending} still pending) "
+                  "— remaining fixtures likely unmatched on FBref; stopping.",
+                  flush=True)
+            return 1
+        pending = new_pending
 
     print(f"[watchdog] hit MAX_RESTARTS with {pending} still pending — "
-          "investigate the last match in backfill.log", flush=True)
+          "investigate backfill.log", flush=True)
     return 1
 
 
