@@ -23,6 +23,9 @@ soccerdata_data/
 downloaded_files/
 */downloaded_files/
 
+# Ingestion run logs (e.g. backend/backfill.log from run_backfill.py)
+*.log
+
 # Node / Next.js (frontend, later phases)
 node_modules/
 .next/
