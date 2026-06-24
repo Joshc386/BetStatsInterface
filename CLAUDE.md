@@ -103,8 +103,9 @@ python -m venv .venv
 # frontend dev server -> npm run dev                         (Phases 7-8: Next.js)
 
 # player-match data (Phase 4 — FBref, VPN OFF, persistent headful session)
-.venv/Scripts/python.exe -m ingestion.run_backfill 2526   # SEASON BACKFILL (watchdog: auto-restarts on Cloudflare stall) — use this
-.venv/Scripts/python.exe -m ingestion.players 2526 2      # bounded smoke test (first 2 matches; no watchdog)
+.venv/Scripts/python.exe -m ingestion.run_backfill 2526 "Premier League"   # SEASON BACKFILL (watchdog auto-restarts on Cloudflare stall) — use this
+.venv/Scripts/python.exe -m ingestion.run_backfill 2324 "Championship"     # competition arg is optional (defaults to Premier League); must be in players.LEAGUE_IDS
+.venv/Scripts/python.exe -m ingestion.players 2526 "Premier League" 2      # bounded smoke test (first 2 matches; no watchdog)
 # (players.py alone has no per-fetch timeout — a Cloudflare re-challenge can hang it; run_backfill supervises it)
 
 # ingestion  (TODO — Phase 5)

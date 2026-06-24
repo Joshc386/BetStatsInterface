@@ -331,6 +331,13 @@ def backfill_season(
     """
     import soccerdata as sd
 
+    available = sd.FBref.available_leagues()
+    if league not in available:
+        raise ValueError(
+            f"league {league!r} not available to the FBref reader; "
+            f"available: {available}"
+        )
+
     with SessionLocal() as session:
         competition = session.scalar(
             select(Competition).where(Competition.name == competition_name)
@@ -374,6 +381,7 @@ def backfill_season(
                 log(f"  [{i}/{len(pending)}] SKIP {msg}")
 
         return {
+            "competition": competition_name,
             "season": season,
             "linked": link["linked"],
             "pending": len(pending),
@@ -382,14 +390,33 @@ def backfill_season(
         }
 
 
+# Operator-facing: competitions this backfill can ingest -> soccerdata league id.
+# Both already have canonical teams + fixtures from football-data.co.uk, so they
+# reuse the existing reconciliation/linking path (no fixture-sourcing needed).
+LEAGUE_IDS = {
+    "Premier League": "ENG-Premier League",
+    "Championship": "ENG-Championship",
+}
+
+
 if __name__ == "__main__":
     import sys
 
     season = sys.argv[1] if len(sys.argv) > 1 else "2526"
-    limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    report = backfill_season(season, limit=limit)
+    competition = sys.argv[2] if len(sys.argv) > 2 else "Premier League"
+    limit = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    if competition not in LEAGUE_IDS:
+        raise SystemExit(
+            f"unknown competition {competition!r}; choose from {list(LEAGUE_IDS)}"
+        )
+    report = backfill_season(
+        season,
+        league=LEAGUE_IDS[competition],
+        competition_name=competition,
+        limit=limit,
+    )
     print(
-        f"\n{report['season']}: linked={report['linked']} "
+        f"\n{report['competition']} {report['season']}: linked={report['linked']} "
         f"pending={report['pending']} ingested={report['ingested']} "
         f"skipped={len(report['skipped'])}"
     )
