@@ -31,7 +31,7 @@ It is a research/analysis tool — **not** a betting bot and **not** a predictiv
 
 - **Backend:** FastAPI (Python)
 - **Database:** PostgreSQL
-- **Frontend:** React / Next.js
+- **Frontend:** React (Vite + TypeScript + Tailwind) — chose Vite SPA over Next.js: single-user, read-only, talks only to the local API, so SSR/routing weight isn't needed (Phase 7 build, 2026-06-24)
 - **Data ingestion:** `soccerdata` library (wraps FBref, football-data.co.uk, ESPN, Understat, etc.), plus direct CSV pulls where simpler
 - **Scheduling:** a nightly job runner (cron, APScheduler, or n8n — user already runs n8n)
 

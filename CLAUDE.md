@@ -9,7 +9,7 @@ Full spec lives in `betting-research-platform-scope.md`; this file is the **rule
 
 Personal, single-user web app for **betting research**. Ingests free football data into local Postgres; serves team/player rolling-window stats, market filters, and fixture views. It is a **research tool, not a bot and not a predictive model**.
 
-**Stack:** FastAPI · PostgreSQL · React/Next.js · `soccerdata` for ingestion.
+**Stack:** FastAPI · PostgreSQL · React (Vite + TypeScript + Tailwind) · `soccerdata` for ingestion.
 
 ---
 
@@ -99,8 +99,10 @@ python -m venv .venv
 .venv/Scripts/python.exe -m pytest                         # tests
 
 # dev
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload   # API at /docs
-# frontend dev server -> npm run dev                         (Phases 7-8: Next.js)
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload   # API at /docs (CORS allows :5173)
+# frontend dev server (Phase 7 — Vite + React + TS + Tailwind, in ../frontend):
+#   cd frontend && npm install && npm run dev -- --port 5173   # UI at http://localhost:5173
+#   reads VITE_API_BASE (default http://localhost:8000); copy frontend/.env.example -> .env to override
 
 # player-match data (Phase 4 — FBref, VPN OFF, persistent headful session)
 .venv/Scripts/python.exe -m ingestion.run_backfill 2526 "Premier League"   # SEASON BACKFILL (watchdog auto-restarts on Cloudflare stall) — use this
