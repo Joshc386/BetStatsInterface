@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,18 @@ from app.schemas import CompetitionOut, H2HRow, SearchHit, Summary
 from app.stats import entity_summary, registry
 
 app = FastAPI(title="BetStats Research API", version="0.1.0")
+
+# Single-user, local-only tool: the Vite dev server (5173) is the sole browser
+# client. Allow localhost origins so the read-only UI can call this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 SCOPES = ("club_league", "club_cup", "club_european", "international")
 

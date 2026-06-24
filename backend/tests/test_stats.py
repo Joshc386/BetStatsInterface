@@ -3,8 +3,8 @@
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
-from app.models.facts import TeamMatch
-from app.stats import entity_summary
+from app.models.facts import PlayerMatch, TeamMatch
+from app.stats import entity_summary, registry
 
 
 def _a_team_with_data(session) -> int:
@@ -44,6 +44,30 @@ def test_going_in_excludes_latest_and_hitrate_is_bounded():
         hr = entity_summary(s, entity="team", entity_id=tid, metric="corners", n=10,
                             threshold=5)["hit_rate"]
         assert hr["n"] == 10 and 0 <= hr["hits"] <= 10
+    finally:
+        s.close()
+
+
+def test_goals_assists_registered_and_computable():
+    # Migration 0003 added player goals/assists columns; they must be exposed as
+    # metrics and aggregate like any other count metric.
+    assert "goals" in registry("player")
+    assert "assists" in registry("player")
+    s = SessionLocal()
+    try:
+        pid = s.scalar(select(PlayerMatch.player_id).limit(1))
+        if pid is None:
+            return  # no player data loaded in this environment
+        res = entity_summary(s, entity="player", entity_id=pid, metric="goals", n=10)
+        direct = [
+            g for (g,) in s.execute(
+                select(PlayerMatch.goals)
+                .where(PlayerMatch.player_id == pid)
+                .order_by(PlayerMatch.date.desc()).limit(10)
+            ).all()
+        ]
+        assert res["games"] == len(direct)
+        assert res["total"] == sum(g for g in direct if g is not None)
     finally:
         s.close()
 

@@ -32,6 +32,8 @@ TEAM_METRICS: dict[str, tuple[str, str]] = {
 }
 
 PLAYER_METRICS: dict[str, tuple[str, str]] = {
+    "goals": ("goals", "count"),
+    "assists": ("assists", "count"),
     "shots": ("shots", "count"),
     "shots_on_target": ("sot", "count"),
     "tackles": ("tackles", "count"),
