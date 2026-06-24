@@ -66,6 +66,7 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "Manchester City": "Man City",
     "Leeds United": "Leeds",
     "Leicester City": "Leicester",
+    "Luton Town": "Luton",  # promoted for 2023-24
 }
 
 
