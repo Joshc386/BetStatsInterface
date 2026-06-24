@@ -67,6 +67,18 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "Leeds United": "Leeds",
     "Leicester City": "Leicester",
     "Luton Town": "Luton",  # promoted for 2023-24
+    # Championship (FBref full club names -> football-data short names). Derived by
+    # diffing the cached 2025-26 schedule vs teams.canonical_name; earlier seasons
+    # (promotion/relegation) add their own clubs before that season's backfill.
+    "Birmingham City": "Birmingham",
+    "Charlton Athletic": "Charlton",
+    "Coventry City": "Coventry",
+    "Derby County": "Derby",
+    "Hull City": "Hull",
+    "Norwich City": "Norwich",
+    "Oxford United": "Oxford",
+    "Stoke City": "Stoke",
+    "Swansea City": "Swansea",
 }
 
 
