@@ -79,6 +79,9 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "Oxford United": "Oxford",
     "Stoke City": "Stoke",
     "Swansea City": "Swansea",
+    # added for 2023-24 / 2024-25 Championship (relegated/promoted clubs)
+    "Cardiff City": "Cardiff",
+    "Plymouth Argyle": "Plymouth",
 }
 
 
