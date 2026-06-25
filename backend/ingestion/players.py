@@ -15,6 +15,7 @@ NOTE: live FBref fetches require the VPN OFF (Cloudflare blocks the VPN exit IP)
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 from pathlib import Path
 
@@ -174,21 +175,51 @@ def summary_to_player_stats(df: pd.DataFrame) -> list[dict]:
 _METRIC_FIELDS = list(_STAT_COLS.keys())
 
 
+def _schedule_date(row) -> dt.datetime:
+    """The schedule row's kickoff date as a tz-aware datetime (UTC midnight).
+
+    The play-off page gives a date but no canonical time; date-level precision is
+    all the rolling-window queries need.
+    """
+    ts = pd.Timestamp(row.get("date"))
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.to_pydatetime()
+
+
+def _is_playoff_round(row) -> bool:
+    """True for EFL promotion play-off rows (FBref `round` = 'Promotion play-offs
+    — …'); False for the regular season (`round` = the competition name)."""
+    return "play-off" in str(row.get("round") or "").lower()
+
+
 def link_fixtures(
     session: Session,
     competition,
     season: str,
     schedule_df: pd.DataFrame,
+    playoff_competition=None,
 ) -> dict:
     """Stamp `fixtures.fbref_match_id` from the FBref schedule.
 
-    Matches each scheduled game to the existing fixture (created in Phase 3 from
+    Regular-season games match the existing fixture (created in Phase 3 from
     football-data.co.uk) on the natural key — competition, season, home, away —
-    after reconciling FBref team names to canonical ids. Idempotent: re-running
-    overwrites the same id. Returns counts; `unmatched` lists games with no
-    fixture (e.g. ordering/postponement quirks) for honest surfacing.
+    after reconciling FBref team names to canonical ids.
+
+    Promotion play-off games share that orientation with the league meeting, so
+    they MUST NOT reuse the league fixture (it would overwrite league player data
+    with play-off data and mis-tag it `club_league`). When `playoff_competition`
+    is given, each play-off game gets its own fixture under that competition; the
+    differing `competition_id` keeps the natural key from colliding. Without it
+    (e.g. the Premier League, which has no play-offs) such rows are surfaced as
+    `unmatched`.
+
+    Idempotent: re-running overwrites the same ids. Returns counts; `unmatched`
+    lists games with no fixture (ordering/postponement quirks) for honest
+    surfacing.
     """
     linked = 0
+    playoff_linked = 0
     unmatched: list[str] = []
     for _, row in schedule_df.reset_index().iterrows():
         game_id = row.get("game_id")
@@ -196,6 +227,18 @@ def link_fixtures(
             continue
         home = resolve_fbref_team(session, row["home_team"])
         away = resolve_fbref_team(session, row["away_team"])
+
+        if _is_playoff_round(row):
+            if playoff_competition is None:
+                unmatched.append(str(row.get("game")))
+                continue
+            _link_playoff_fixture(
+                session, playoff_competition, season, home, away,
+                _schedule_date(row), str(game_id),
+            )
+            playoff_linked += 1
+            continue
+
         fixture = session.scalar(
             select(Fixture).where(
                 Fixture.competition_id == competition.id,
@@ -209,7 +252,41 @@ def link_fixtures(
             continue
         fixture.fbref_match_id = str(game_id)
         linked += 1
-    return {"linked": linked, "unmatched": unmatched}
+    return {"linked": linked, "playoff_linked": playoff_linked, "unmatched": unmatched}
+
+
+def _link_playoff_fixture(
+    session: Session, playoff_competition, season: str, home, away,
+    date: dt.datetime, game_id: str,
+) -> Fixture:
+    """Get-or-create the play-off fixture under its own competition, idempotently.
+
+    football-data.co.uk does not cover the play-offs, so unlike league fixtures
+    there is no pre-existing row — we create it here (player data only)."""
+    fixture = session.scalar(
+        select(Fixture).where(
+            Fixture.competition_id == playoff_competition.id,
+            Fixture.season == season,
+            Fixture.home_team_id == home.id,
+            Fixture.away_team_id == away.id,
+        )
+    )
+    if fixture is None:
+        fixture = Fixture(
+            competition_id=playoff_competition.id,
+            season=season,
+            date=date,
+            home_team_id=home.id,
+            away_team_id=away.id,
+            status="finished",
+            fbref_match_id=game_id,
+        )
+        session.add(fixture)
+        session.flush()
+    else:
+        fixture.fbref_match_id = game_id
+        fixture.date = date
+    return fixture
 
 
 def _upsert_player(
@@ -318,12 +395,18 @@ def parse_player_ids(match_html: str) -> dict[str, str]:
     return out
 
 
-def _pending_fixtures(session: Session, competition: Competition, season: str):
-    """Finished, FBref-linked fixtures with no player_match rows yet (resumable)."""
+def _pending_fixtures(
+    session: Session, competition_ids: list[int], season: str
+):
+    """Finished, FBref-linked fixtures with no player_match rows yet (resumable).
+
+    Spans every competition in `competition_ids` so one backfill covers both the
+    league and its play-offs in a single pass.
+    """
     rows = session.execute(
         select(Fixture.id, Fixture.fbref_match_id)
         .where(
-            Fixture.competition_id == competition.id,
+            Fixture.competition_id.in_(competition_ids),
             Fixture.season == season,
             Fixture.status == "finished",
             Fixture.fbref_match_id.is_not(None),
@@ -373,15 +456,30 @@ def backfill_season(
         if competition is None:
             raise ValueError(f"competition {competition_name!r} not seeded")
 
+        # The play-offs (if any for this league) are sourced from the SAME FBref
+        # schedule but routed to their own competition so they never contaminate
+        # league form. Named "<league> Play-offs"; absent for e.g. the PL.
+        playoff = session.scalar(
+            select(Competition).where(
+                Competition.name == f"{competition_name} Play-offs"
+            )
+        )
+        ctype_by_comp = {competition.id: competition.type}
+        comp_ids = [competition.id]
+        if playoff is not None:
+            ctype_by_comp[playoff.id] = playoff.type
+            comp_ids.append(playoff.id)
+
         fb = sd.FBref(leagues=league, seasons=[season], headless=False)
         log(f"[{season}] fetching schedule (solves Cloudflare once)…")
         schedule = fb.read_schedule()
-        link = link_fixtures(session, competition, season, schedule)
+        link = link_fixtures(session, competition, season, schedule, playoff)
         session.commit()
-        log(f"[{season}] linked {link['linked']} fixtures, "
+        log(f"[{season}] linked {link['linked']} league + "
+            f"{link['playoff_linked']} play-off fixtures, "
             f"{len(link['unmatched'])} unmatched")
 
-        pending = _pending_fixtures(session, competition, season)
+        pending = _pending_fixtures(session, comp_ids, season)
         if limit is not None:
             pending = pending[:limit]
         log(f"[{season}] {len(pending)} matches to ingest")
@@ -397,7 +495,10 @@ def backfill_season(
                 )
                 player_ids = parse_player_ids(html)
                 fixture = session.get(Fixture, fixture_id)
-                n = ingest_match(session, fixture, competition.type, df, player_ids)
+                n = ingest_match(
+                    session, fixture, ctype_by_comp[fixture.competition_id],
+                    df, player_ids,
+                )
                 session.commit()
                 ingested += 1
                 log(f"  [{i}/{len(pending)}] {game_id}: {n} players "
@@ -412,6 +513,7 @@ def backfill_season(
             "competition": competition_name,
             "season": season,
             "linked": link["linked"],
+            "playoff_linked": link["playoff_linked"],
             "pending": len(pending),
             "ingested": ingested,
             "skipped": skipped,

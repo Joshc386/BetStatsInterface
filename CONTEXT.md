@@ -52,6 +52,10 @@ The scope tag on every fact row, one of `club_league` | `club_cup` | `club_europ
 **v1 scope**:
 The top four English tiers — Premier League, Championship, League One, League Two — `club_league` only. **Team** data is confident across all four (football-data.co.uk). **Player** data is confident for PL + Championship but **best-effort for League One / League Two** (Opta's lower-tier coverage was always thin, compounded by FBref's Jan-2026 removal) — verified at backfill and labelled in the UI as "covered competitions only", never implied complete.
 
+**Promotion Play-offs**:
+The end-of-season knockout deciding the last promotion place (Championship/League One/League Two): teams finishing 3rd–6th contest two-legged semi-finals (4 fixtures) then a single neutral-venue final. Modelled as its **own competition** ("Championship Play-offs", **Competition Type** `club_cup`), never as part of the regular season — a play-off leg shares the same home/away orientation as a league meeting, so keeping it under `club_league` collided on the Fixture natural key and contaminated league form (see `docs/adr/0004`). Player data only (football-data.co.uk does not cover play-offs). A "last N **league** games" window therefore excludes them by scope.
+_Avoid_: treating a play-off game as a Championship (league) Fixture.
+
 **Squad** (roster):
 The set of players currently registered to a club, as listed on that club's FBref squad page — *membership*, not appearance history. A new signing who has not played yet is in the Squad; a player loaned out is not (he appears at his loan club). Maintained by the roster-refresh job (Job C) into the `squads` table. Distinct from a **Player-Match**/**Appearance** (what a player *did*): the Squad decides *who* is shown, Appearances supply *the numbers*.
 _Avoid_: lineup (a Squad is not a starting XI), roster as a synonym for the played-minutes set.

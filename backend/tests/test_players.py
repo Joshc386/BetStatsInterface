@@ -61,6 +61,20 @@ def _schedule_df(season: str):
     return fb.read_schedule(force_cache=True)
 
 
+def _champ_schedule_df(season: str):
+    """Load the Championship schedule from the soccerdata cache (no network).
+
+    The Championship schedule carries promotion play-off rows; the PL's does not.
+    """
+    import logging
+
+    logging.disable(logging.CRITICAL)
+    import soccerdata as sd
+
+    fb = sd.FBref(leagues="ENG-Championship", seasons=season)
+    return fb.read_schedule(force_cache=True)
+
+
 def test_parse_player_ids_is_scoped_to_lineups():
     """Returns only the two lineups' players, not the page's comparison widgets.
 
@@ -252,6 +266,57 @@ def test_link_fixtures_sets_fbref_match_id_idempotently():
 
         r2 = link_fixtures(session, comp, "2425", sched)
         assert r2["linked"] == r1["linked"]  # idempotent
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_link_fixtures_routes_playoffs_to_their_own_competition():
+    """Promotion play-off games must land on the play-off competition, never on
+    the same-orientation league fixture (the contamination bug). Guards the fix
+    in `link_fixtures` — see docs/adr/0003 + the Championship Play-offs comp.
+    """
+    session = SessionLocal()
+    try:
+        champ = session.scalar(
+            select(Competition).where(Competition.name == "Championship")
+        )
+        playoff = session.scalar(
+            select(Competition).where(Competition.name == "Championship Play-offs")
+        )
+        if champ is None or playoff is None:
+            pytest.skip("Championship / play-off competitions not seeded")
+
+        sched = _champ_schedule_df("2324")
+        flat = sched.reset_index()
+        pmask = flat["round"].astype(str).str.contains(
+            "play-off", case=False, na=False
+        )
+        playoff_gids = set(flat.loc[pmask, "game_id"].dropna().astype(str))
+        assert len(playoff_gids) == 5  # 4 semi legs + 1 final
+
+        res = link_fixtures(session, champ, "2324", sched, playoff)
+        session.flush()
+        assert res["playoff_linked"] == 5
+
+        # every play-off game gets its own fixture under the play-off competition
+        for gid in playoff_gids:
+            fx = session.scalar(
+                select(Fixture).where(Fixture.fbref_match_id == gid)
+            )
+            assert fx is not None, f"play-off game {gid} got no fixture"
+            assert fx.competition_id == playoff.id
+
+        # and NO Championship (league) fixture is left holding a play-off id
+        leaked = session.scalar(
+            select(func.count())
+            .select_from(Fixture)
+            .where(
+                Fixture.competition_id == champ.id,
+                Fixture.fbref_match_id.in_(list(playoff_gids)),
+            )
+        )
+        assert leaked == 0
     finally:
         session.rollback()
         session.close()
