@@ -82,6 +82,18 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # added for 2023-24 / 2024-25 Championship (relegated/promoted clubs)
     "Cardiff City": "Cardiff",
     "Plymouth Argyle": "Plymouth",
+    # Championship player-match-df FULL names. The SCHEDULE page spells these short
+    # (QPR, Blackburn, West Brom, Preston, Sheffield Weds, Huddersfield, Rotherham),
+    # so the schedule alias-diff resolved them — but the per-match player df uses the
+    # full club name, which fail-loud skipped every fixture involving them. (The
+    # two-spelling trap: cover BOTH the schedule and player-df spellings.)
+    "Blackburn Rovers": "Blackburn",
+    "Huddersfield Town": "Huddersfield",
+    "Preston North End": "Preston",
+    "Queens Park Rangers": "QPR",
+    "Rotherham United": "Rotherham",
+    "Sheffield Wednesday": "Sheffield Weds",
+    "West Bromwich Albion": "West Brom",
 }
 
 
