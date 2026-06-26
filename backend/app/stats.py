@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.facts import PlayerMatch, TeamMatch
-from app.models.reference import Player, Team
+from app.models.reference import Competition, Player, Team
 
 # metric name -> (column attribute, kind) where kind is "count" or "bool"
 TEAM_METRICS: dict[str, tuple[str, str]] = {
@@ -59,6 +59,7 @@ def entity_summary(
     n: int = 10,
     competition_id: int | None = None,  # a specific competition; None = all competitions
     scope: str | None = None,  # optional coarser filter by competition_type
+    team_id: int | None = None,  # players only: isolate one club Spell
     seasons: list[str] | None = None,
     threshold: float | None = None,
     direction: str = "over",
@@ -76,14 +77,24 @@ def entity_summary(
         opp.canonical_name.label("opponent"),
         getattr(table, attr).label("value"),
     ]
+    club = aliased(Team)
     if entity == "player":
-        cols.append(table.minutes.label("minutes"))
+        # the club + competition per appearance drive Spell / competition grouping
+        cols += [
+            table.minutes.label("minutes"),
+            table.team_id.label("team_id"),
+            club.canonical_name.label("team"),
+            table.competition_id.label("competition_id"),
+            Competition.name.label("competition"),
+        ]
 
     conds = [id_col == entity_id]
     if competition_id is not None:
         conds.append(table.competition_id == competition_id)
     if scope is not None:
         conds.append(table.competition_type == scope)
+    if team_id is not None:
+        conds.append(table.team_id == team_id)
     comp_label = (
         f"competition={competition_id}" if competition_id is not None
         else (f"scope={scope}" if scope is not None else "all competitions")
@@ -95,6 +106,10 @@ def entity_summary(
         .where(*conds)
         .order_by(table.date.desc())
     )
+    if entity == "player":
+        q = q.join(club, club.id == table.team_id).join(
+            Competition, Competition.id == table.competition_id
+        )
     if seasons:
         q = q.where(table.season.in_(seasons))
         window = f"seasons={seasons} · {comp_label}"
@@ -159,6 +174,10 @@ def entity_summary(
                 "is_home": r.is_home,
                 "value": r.value,
                 "minutes": getattr(r, "minutes", None),
+                "team_id": getattr(r, "team_id", None),
+                "team": getattr(r, "team", None),
+                "competition_id": getattr(r, "competition_id", None),
+                "competition": getattr(r, "competition", None),
             }
             for r in rows
         ],

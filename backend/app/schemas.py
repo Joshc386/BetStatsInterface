@@ -13,6 +13,11 @@ class BreakdownRow(BaseModel):
     is_home: bool
     value: float | None
     minutes: int | None = None  # players only
+    # players only — the club + competition for that appearance (Spell grouping)
+    team_id: int | None = None
+    team: str | None = None
+    competition_id: int | None = None
+    competition: str | None = None
 
 
 class HitRate(BaseModel):

@@ -38,6 +38,11 @@ export interface BreakdownRow {
   is_home: boolean
   value: number | null
   minutes: number | null
+  // players only — club + competition for that appearance (Spell grouping)
+  team_id?: number | null
+  team?: string | null
+  competition_id?: number | null
+  competition?: string | null
 }
 
 export interface Summary {

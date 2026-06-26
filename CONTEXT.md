@@ -44,6 +44,10 @@ The set of past games a Summary Metric is computed over. Selectable two ways:
 **Breakdown**:
 The per-game rows underlying a Summary Metric (date, opponent, H/A, Metric value), shown with a footer total/average so the headline and evidence reconcile. It is the source data the headline aggregates, not extra work.
 
+**Spell**:
+A player's continuous run of **Appearances** at one club, bounded by a transfer. The **player view** delimits spells with a separator and subtotals each; *Segment by Team* groups the window's appearances into spells (*Segment by Competition* groups the same appearances by competition instead). A spell is read straight from the data — the `team_id` changing across a player's date-ordered **Player-Match** rows — not from any roster source. Subtotals always reconcile to the headline (they partition the same rows).
+_Avoid_: stint; "career" (a career is all of a player's spells).
+
 **Head-to-Head** (H2H):
 The set of past **Fixtures** between two specific teams — a **Rolling Window** filtered to one opponent. Drives the **Fixture view**'s meetings list and its aggregate Summary Metrics ("BTTS in 4 of the last 6 meetings"). Fixture-level Metrics (BTTS, total goals) give one figure per meeting; per-team Metrics (goals-for, clean-sheet) differ by side. League-only in v1 (no cup/international team data); spans all held seasons, and degrades gracefully when two teams have few or no meetings.
 _Avoid_: form (form is measured vs all opponents; H2H is vs one specific team).

@@ -97,7 +97,7 @@ def search(q: str = Query(min_length=2), limit: int = 20,
 
 
 def _summary(entity, entity_id, metric, n, competition_id, scope, season, threshold,
-             direction, window_mode, session) -> Summary:
+             direction, window_mode, session, team_id=None) -> Summary:
     if metric not in registry(entity):
         raise HTTPException(404, f"unknown {entity} metric '{metric}'. See /metrics.")
     if scope is not None and scope not in SCOPES:
@@ -106,7 +106,7 @@ def _summary(entity, entity_id, metric, n, competition_id, scope, season, thresh
         raise HTTPException(404, f"competition {competition_id} not found")
     result = entity_summary(
         session, entity=entity, entity_id=entity_id, metric=metric, n=n,
-        competition_id=competition_id, scope=scope,
+        competition_id=competition_id, scope=scope, team_id=team_id,
         seasons=[season] if season else None, threshold=threshold,
         direction=direction, window_mode=window_mode,
     )
@@ -140,13 +140,14 @@ def player_summary(
     competition_id: int | None = Query(None, description="specific competition; omit for all"),
     scope: str | None = None,
     season: str | None = None,
+    team_id: int | None = Query(None, description="isolate one club Spell (players only)"),
     threshold: float | None = None,
     direction: str = Query("over", pattern="^(over|under)$"),
     window_mode: str = Query("display", pattern="^(display|going_in)$"),
     session: Session = Depends(get_session),
 ) -> Summary:
     return _summary("player", player_id, metric, n, competition_id, scope, season,
-                    threshold, direction, window_mode, session)
+                    threshold, direction, window_mode, session, team_id=team_id)
 
 
 @app.get("/fixtures/compare", response_model=FixtureComparison)
