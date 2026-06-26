@@ -29,7 +29,13 @@ export default function SearchBar({ compact = false }: { compact?: boolean }) {
             setError(null)
           }
         })
-        .catch((e) => !cancelled && setError(String(e.message ?? e)))
+        .catch((e) => {
+          if (!cancelled) {
+            setError(String(e.message ?? e))
+            setHits([])
+            setOpen(true) // surface the error instead of failing silently
+          }
+        })
     }, 200)
     return () => {
       cancelled = true

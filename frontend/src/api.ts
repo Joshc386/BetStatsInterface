@@ -96,7 +96,13 @@ export interface FixtureComparison {
 }
 
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`)
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`)
+  } catch {
+    // fetch rejects (not an HTTP error) when the API is unreachable.
+    throw new Error(`Cannot reach the API at ${API_BASE} — is the backend running?`)
+  }
   if (!res.ok) {
     let detail = res.statusText
     try {
