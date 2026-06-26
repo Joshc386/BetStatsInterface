@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useParams } from 'react-router-dom'
-import { api, type Entity, type Summary } from '../api'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { api, type Entity, type SearchHit, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 
 const label = (m: string) =>
@@ -87,6 +87,10 @@ export default function EntityView({ entity }: { entity: Entity }) {
         </h1>
         <span className="text-sm text-slate-500 capitalize">{entity}</span>
       </div>
+
+      {entity === 'team' && Number.isFinite(entityId) && (
+        <OpponentPicker teamId={entityId} />
+      )}
 
       {/* Controls */}
       <div className="mb-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
@@ -182,6 +186,55 @@ export default function EntityView({ entity }: { entity: Entity }) {
         />
       )}
       {loading && !summary && <p className="text-slate-500">Loading…</p>}
+    </div>
+  )
+}
+
+function OpponentPicker({ teamId }: { teamId: number }) {
+  const navigate = useNavigate()
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<SearchHit[]>([])
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    if (q.trim().length < 2) {
+      setHits([])
+      return
+    }
+    timer.current = setTimeout(() => {
+      api
+        .search(q.trim())
+        .then((r) => setHits(r.filter((h) => h.entity === 'team' && h.id !== teamId)))
+        .catch(() => setHits([]))
+    }, 200)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [q, teamId])
+
+  return (
+    <div className="relative mb-5 max-w-sm">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Compare head-to-head vs…"
+        className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600"
+      />
+      {hits.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-lg">
+          {hits.slice(0, 8).map((h) => (
+            <li key={h.id}>
+              <button
+                onMouseDown={() => navigate(`/fixture/${teamId}/vs/${h.id}`)}
+                className="block w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-sky-800"
+              >
+                {h.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

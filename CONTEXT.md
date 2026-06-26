@@ -44,6 +44,10 @@ The set of past games a Summary Metric is computed over. Selectable two ways:
 **Breakdown**:
 The per-game rows underlying a Summary Metric (date, opponent, H/A, Metric value), shown with a footer total/average so the headline and evidence reconcile. It is the source data the headline aggregates, not extra work.
 
+**Head-to-Head** (H2H):
+The set of past **Fixtures** between two specific teams — a **Rolling Window** filtered to one opponent. Drives the **Fixture view**'s meetings list and its aggregate Summary Metrics ("BTTS in 4 of the last 6 meetings"). Fixture-level Metrics (BTTS, total goals) give one figure per meeting; per-team Metrics (goals-for, clean-sheet) differ by side. League-only in v1 (no cup/international team data); spans all held seasons, and degrades gracefully when two teams have few or no meetings.
+_Avoid_: form (form is measured vs all opponents; H2H is vs one specific team).
+
 ### Scope & coverage
 
 **Competition Type**:
@@ -77,6 +81,8 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 - A **Summary Metric** in hit-rate mode requires one **Threshold**; in aggregate mode it requires none.
 - Every **Metric** row carries a **Competition Type** and a `season`; a **Rolling Window** is always read within a Competition Type scope.
 - A **Breakdown** is the set of **Metric** rows a **Summary Metric** aggregates.
+- A **Head-to-Head** is a **Rolling Window** filtered to one opponent; its **Breakdown** is the two teams' past meetings.
+- The **Fixture view** compares two teams by **Team form** (each team's recent Summary Metrics vs all opponents) and **Head-to-Head**; the **Team hub** is one team's full deep-dive. Both are read-only surfaces over the same facts, not stored entities.
 
 ## Example dialogue
 

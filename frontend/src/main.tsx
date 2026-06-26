@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import SearchPage from './pages/SearchPage.tsx'
 import EntityView from './pages/EntityView.tsx'
+import FixtureView from './pages/FixtureView.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<SearchPage />} />
           <Route path="team/:id" element={<EntityView entity="team" />} />
           <Route path="player/:id" element={<EntityView entity="player" />} />
+          <Route path="fixture/:homeId/vs/:awayId" element={<FixtureView />} />
         </Route>
       </Routes>
     </BrowserRouter>

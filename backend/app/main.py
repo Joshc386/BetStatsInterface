@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Team
-from app.schemas import CompetitionOut, H2HRow, SearchHit, Summary
+from app.fixtures import fixture_comparison, fixture_detail
+from app.schemas import (
+    CompetitionOut,
+    FixtureComparison,
+    FixtureRow,
+    SearchHit,
+    Summary,
+)
 from app.stats import entity_summary, registry
 
 app = FastAPI(title="BetStats Research API", version="0.1.0")
@@ -142,15 +149,39 @@ def player_summary(
                     threshold, direction, window_mode, session)
 
 
-@app.get("/teams/{team_id}/h2h/{opponent_id}", response_model=list[H2HRow])
-def head_to_head(team_id: int, opponent_id: int, limit: int = Query(20, ge=1, le=100),
-                 session: Session = Depends(get_session)) -> list[H2HRow]:
-    rows = session.execute(
-        select(TeamMatch.date, TeamMatch.season, TeamMatch.is_home,
-               TeamMatch.gf, TeamMatch.ga, TeamMatch.result)
-        .where(TeamMatch.team_id == team_id, TeamMatch.opponent_id == opponent_id)
-        .order_by(TeamMatch.date.desc())
-        .limit(limit)
-    ).all()
-    return [H2HRow(date=d, season=s, is_home=h, gf=gf, ga=ga, result=r)
-            for d, s, h, gf, ga, r in rows]
+@app.get("/fixtures/compare", response_model=FixtureComparison)
+def fixtures_compare(
+    home: int = Query(..., description="home team id"),
+    away: int = Query(..., description="away team id"),
+    n: int = Query(10, ge=1, le=50),
+    session: Session = Depends(get_session),
+) -> FixtureComparison:
+    """Raw rows for the Fixture view — each team's last-n league games plus both
+    sides of their last-n league meetings. The client aggregates (ADR 0005)."""
+    teams = {}
+    for team_id in (home, away):
+        team = session.get(Team, team_id)
+        if team is None:
+            raise HTTPException(404, f"team {team_id} not found")
+        teams[team_id] = team.canonical_name
+    blocks = fixture_comparison(session, home_id=home, away_id=away, n=n)
+    return FixtureComparison(
+        home_id=home,
+        home_name=teams[home],
+        away_id=away,
+        away_name=teams[away],
+        home=[FixtureRow.model_validate(r) for r in blocks["home"]],
+        away=[FixtureRow.model_validate(r) for r in blocks["away"]],
+        h2h=[FixtureRow.model_validate(r) for r in blocks["h2h"]],
+    )
+
+
+@app.get("/fixtures/{fixture_id}", response_model=list[FixtureRow])
+def fixture_drilldown(
+    fixture_id: int, session: Session = Depends(get_session)
+) -> list[FixtureRow]:
+    """Both teams' full team_match rows for one match (the drill-down)."""
+    rows = fixture_detail(session, fixture_id=fixture_id)
+    if not rows:
+        raise HTTPException(404, f"fixture {fixture_id} not found")
+    return [FixtureRow.model_validate(r) for r in rows]

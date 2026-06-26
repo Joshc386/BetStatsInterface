@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class BreakdownRow(BaseModel):
@@ -53,10 +53,45 @@ class CompetitionOut(BaseModel):
     tier: int | None
 
 
-class H2HRow(BaseModel):
+class FixtureRow(BaseModel):
+    """One team's perspective on a single match — the raw row the Fixture view
+    aggregates client-side (see docs/adr/0005)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    fixture_id: int
+    team_id: int
     date: dt.datetime
     season: str
+    competition_id: int
+    competition: str
     is_home: bool
+    opponent_id: int
+    opponent: str
     gf: int | None
     ga: int | None
+    shots: int | None
+    sot: int | None
+    shots_conceded: int | None
+    sot_conceded: int | None
+    corners: int | None
+    fouls: int | None
+    yellows: int | None
+    reds: int | None
+    total_goals: int | None
+    btts: bool | None
+    clean_sheet: bool | None
     result: str | None
+
+
+class FixtureComparison(BaseModel):
+    """Team form (each team's last-N) + Head-to-Head (both sides of their last-N
+    meetings) as raw rows for one fixture pairing."""
+
+    home_id: int
+    home_name: str
+    away_id: int
+    away_name: str
+    home: list[FixtureRow]
+    away: list[FixtureRow]
+    h2h: list[FixtureRow]
