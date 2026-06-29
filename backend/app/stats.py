@@ -60,6 +60,7 @@ def entity_summary(
     competition_id: int | None = None,  # a specific competition; None = all competitions
     scope: str | None = None,  # optional coarser filter by competition_type
     team_id: int | None = None,  # players only: isolate one club Spell
+    min_minutes: int = 0,  # players only: drop sub-floor appearances before windowing
     seasons: list[str] | None = None,
     threshold: float | None = None,
     direction: str = "over",
@@ -95,6 +96,9 @@ def entity_summary(
         conds.append(table.competition_type == scope)
     if team_id is not None:
         conds.append(table.team_id == team_id)
+    if min_minutes > 0 and entity == "player":
+        # filter-then-window: keep only appearances of >= min_minutes, before LIMIT n
+        conds.append(table.minutes >= min_minutes)
     comp_label = (
         f"competition={competition_id}" if competition_id is not None
         else (f"scope={scope}" if scope is not None else "all competitions")

@@ -71,6 +71,7 @@ export default function PlayerView() {
   const [segment, setSegment] = useState<Segment>('team')
   const [threshold, setThreshold] = useState('')
   const [direction, setDirection] = useState<'over' | 'under'>('over')
+  const [minMinutes, setMinMinutes] = useState('') // '' = no floor
   // drill-in filters set by clicking a segment
   const [teamFilter, setTeamFilter] = useState<{ id: number; name: string } | null>(null)
   const [compFilter, setCompFilter] = useState<{ id: number; name: string } | null>(null)
@@ -93,6 +94,8 @@ export default function PlayerView() {
       params.threshold = threshold.trim()
       params.direction = direction
     }
+    if (minMinutes.trim() !== '' && Number(minMinutes) > 0)
+      params.min_minutes = String(Math.floor(Number(minMinutes)))
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -104,7 +107,7 @@ export default function PlayerView() {
     return () => {
       cancelled = true
     }
-  }, [playerId, metric, n, scope, teamFilter, compFilter, threshold, direction])
+  }, [playerId, metric, n, scope, teamFilter, compFilter, threshold, direction, minMinutes])
 
   const groups = useMemo(
     () => (summary ? groupBreakdown(summary.breakdown, segment) : null),
@@ -171,6 +174,12 @@ export default function PlayerView() {
               <option value="under">under</option>
             </select>
           </div>
+        </Field>
+        <Field label="Min min/game">
+          <input
+            type="number" min={0} step={5} placeholder="—" value={minMinutes}
+            onChange={(e) => setMinMinutes(e.target.value)} className={`${ctrl} w-20`}
+          />
         </Field>
       </div>
 

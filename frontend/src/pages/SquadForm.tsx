@@ -58,6 +58,8 @@ export interface SquadControlState {
   setThreshold: (v: string) => void
   direction: 'over' | 'under'
   setDirection: (v: 'over' | 'under') => void
+  minMinutes: string
+  setMinMinutes: (v: string) => void
 }
 
 /** Shared control state for the panel(s) on one surface. On the Fixture view a
@@ -68,9 +70,10 @@ export function useSquadControls(): SquadControlState {
   const [scope, setScope] = useState('club_league')
   const [threshold, setThreshold] = useState('')
   const [direction, setDirection] = useState<'over' | 'under'>('over')
+  const [minMinutes, setMinMinutes] = useState('')
   return {
     metric, setMetric, n, setN, scope, setScope,
-    threshold, setThreshold, direction, setDirection,
+    threshold, setThreshold, direction, setDirection, minMinutes, setMinMinutes,
   }
 }
 
@@ -114,6 +117,12 @@ export function SquadControls({
             <option value="under">under</option>
           </select>
         </div>
+      </Field>
+      <Field label="Min min/game">
+        <input
+          type="number" min={0} step={5} placeholder="—" value={c.minMinutes}
+          onChange={(e) => c.setMinMinutes(e.target.value)} className={`${ctrl} w-20`}
+        />
       </Field>
     </div>
   )
@@ -162,11 +171,13 @@ export function SquadFormPanel({
     if (!data) return []
     const def = PLAYER_METRICS[c.metric] ?? PLAYER_METRICS.shots_on_target
     const threshold = c.threshold.trim() !== '' ? Number(c.threshold) : undefined
+    const floor = c.minMinutes.trim() !== '' ? Math.floor(Number(c.minMinutes)) : 0
 
     // Rows arrive grouped by player, newest-first (backend ORDER BY player, date desc).
     const byPlayer = new Map<number, SquadAppearanceRow[]>()
     for (const r of data.rows) {
       if (c.scope !== 'all' && r.competition_type !== c.scope) continue
+      if (floor > 0 && (r.minutes ?? 0) < floor) continue // drop cameos before windowing
       const list = byPlayer.get(r.player_id) ?? []
       list.push(r)
       byPlayer.set(r.player_id, list)
@@ -190,7 +201,7 @@ export function SquadFormPanel({
     })
     rows.sort((a, b) => b.sortKey - a.sortKey)
     return rows
-  }, [data, c.metric, c.n, c.scope, c.threshold, c.direction])
+  }, [data, c.metric, c.n, c.scope, c.threshold, c.direction, c.minMinutes])
 
   if (error)
     return (
