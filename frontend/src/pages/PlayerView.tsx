@@ -12,6 +12,9 @@ const fmt = (v: number | null | undefined, dp = 2) =>
 
 const date = (d: string) => new Date(d).toLocaleDateString('en-GB')
 
+// season tag "2526" -> "2025-26"
+const seasonFmt = (s: string) => (s.length === 4 ? `20${s.slice(0, 2)}-${s.slice(2)}` : s)
+
 // competition_type -> selector label. 'all' clears the scope filter.
 const SCOPES: Array<[string, string]> = [
   ['club_league', 'League'],
@@ -63,11 +66,14 @@ function groupBreakdown(rows: BreakdownRow[], by: Segment): Group[] | null {
 export default function PlayerView() {
   const { id } = useParams()
   const playerId = Number(id)
-  const { metrics, error: catError } = useCatalogue()
+  const { metrics, seasons: seasonCat, error: catError } = useCatalogue()
   const metricList = useMemo(() => (metrics ? metrics.player : []), [metrics])
+  const playerSeasons = useMemo(() => seasonCat?.player ?? [], [seasonCat]) // newest first
 
   const [metric, setMetric] = useState('shots_on_target')
+  const [winMode, setWinMode] = useState<'games' | 'seasons'>('games')
   const [n, setN] = useState(10)
+  const [seasonCount, setSeasonCount] = useState(1) // most-recent N seasons
   const [scope, setScope] = useState('club_league') // default: league (scope-clean)
   const [segment, setSegment] = useState<Segment>('team')
   const [threshold, setThreshold] = useState('')
@@ -85,9 +91,16 @@ export default function PlayerView() {
     if (metricList.length && !metricList.includes(metric)) setMetric('shots_on_target')
   }, [metricList]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // season mode: the most-recent `seasonCount` seasons; games mode: undefined
+  const selectedSeasons = useMemo(
+    () => (winMode === 'seasons' ? playerSeasons.slice(0, seasonCount) : undefined),
+    [winMode, playerSeasons, seasonCount],
+  )
+
   useEffect(() => {
     if (!Number.isFinite(playerId)) return
-    const params: Record<string, string> = { metric, n: String(n) }
+    const params: Record<string, string> = { metric }
+    if (winMode === 'games') params.n = String(n) // ignored by the API in season mode
     if (scope !== 'all') params.scope = scope
     if (teamFilter) params.team_id = String(teamFilter.id)
     if (compFilter) params.competition_id = String(compFilter.id)
@@ -101,14 +114,14 @@ export default function PlayerView() {
     setLoading(true)
     setError(null)
     api
-      .summary('player', playerId, params)
+      .summary('player', playerId, params, selectedSeasons)
       .then((s) => !cancelled && setSummary(s))
       .catch((e) => !cancelled && setError(String(e.message ?? e)))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [playerId, metric, n, scope, teamFilter, compFilter, threshold, direction, minMinutes])
+  }, [playerId, metric, winMode, n, selectedSeasons, scope, teamFilter, compFilter, threshold, direction, minMinutes])
 
   const groups = useMemo(
     () => (summary ? groupBreakdown(summary.breakdown, segment) : null),
@@ -116,6 +129,12 @@ export default function PlayerView() {
   )
 
   const scopeName = SCOPES.find(([v]) => v === scope)?.[1] ?? 'League'
+  const windowLabel =
+    winMode === 'games'
+      ? `Last ${n}`
+      : seasonCount === 1
+        ? seasonFmt(playerSeasons[0] ?? '')
+        : `Last ${seasonCount} seasons`
 
   return (
     <div>
@@ -147,9 +166,32 @@ export default function PlayerView() {
             ))}
           </select>
         </Field>
-        <Field label="Last N">
-          <LastNInput n={n} setN={setN} max={100} />
+        <Field label="Window">
+          <Toggle
+            value={winMode}
+            onChange={(v) => setWinMode(v as 'games' | 'seasons')}
+            options={[['games', 'Games'], ['seasons', 'Seasons']]}
+          />
         </Field>
+        {winMode === 'games' ? (
+          <Field label="Last N">
+            <LastNInput n={n} setN={setN} max={100} />
+          </Field>
+        ) : (
+          <Field label="Seasons">
+            <select
+              className={ctrl}
+              value={seasonCount}
+              onChange={(e) => setSeasonCount(Number(e.target.value))}
+            >
+              {playerSeasons.map((_, i) => (
+                <option key={i} value={i + 1}>
+                  {i === 0 ? `This season (${seasonFmt(playerSeasons[0])})` : `Last ${i + 1} seasons`}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Scope">
           <Toggle value={scope} onChange={setScope} options={SCOPES} />
         </Field>
@@ -189,7 +231,7 @@ export default function PlayerView() {
       {summary && (
         <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
           <p className="mb-3 text-sm text-slate-500">
-            Last {n} · {scopeName}
+            {windowLabel} · {scopeName}
             {teamFilter ? ` · ${teamFilter.name}` : ''}
             {compFilter ? ` · ${compFilter.name}` : ''}
           </p>

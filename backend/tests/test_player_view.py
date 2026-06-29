@@ -157,7 +157,7 @@ def test_endpoint_threads_min_minutes_through():
         pid = _multiclub_player(s)
         result = player_summary(
             player_id=pid, metric="goals", n=20, competition_id=None, scope=None,
-            season=None, team_id=None, min_minutes=60, threshold=None,
+            seasons=None, team_id=None, min_minutes=60, threshold=None,
             direction="over", window_mode="display", session=s,
         )
         oracle = entity_summary(

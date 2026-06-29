@@ -72,6 +72,49 @@ def test_goals_assists_registered_and_computable():
         s.close()
 
 
+def test_season_window_filters_to_chosen_seasons_and_ignores_n():
+    """Season mode is a filter over the season tag, not the last-N window: it must
+    return *every* row in the chosen season(s) regardless of n, and stay scope-clean."""
+    s = SessionLocal()
+    try:
+        tid = _a_team_with_data(s)
+        # pick the most-recent season this team has league rows in
+        season = s.scalar(
+            select(TeamMatch.season)
+            .where(TeamMatch.team_id == tid, TeamMatch.competition_type == "club_league")
+            .order_by(TeamMatch.season.desc()).limit(1)
+        )
+        res = entity_summary(s, entity="team", entity_id=tid, metric="corners",
+                             scope="club_league", n=1, seasons=[season])
+        direct = [
+            c for (c,) in s.execute(
+                select(TeamMatch.corners).where(
+                    TeamMatch.team_id == tid,
+                    TeamMatch.competition_type == "club_league",
+                    TeamMatch.season == season,
+                )
+            ).all()
+        ]
+        # n=1 must NOT clamp the result — season mode ignores it
+        assert res["games"] == len(direct) > 1
+        assert res["total"] == sum(c for c in direct if c is not None)
+        assert all(season in res["window"] for season in [season])
+
+        # multi-season superset: two seasons >= one season
+        seasons2 = [
+            ss for (ss,) in s.execute(
+                select(TeamMatch.season).distinct()
+                .where(TeamMatch.team_id == tid, TeamMatch.competition_type == "club_league")
+                .order_by(TeamMatch.season.desc()).limit(2)
+            ).all()
+        ]
+        multi = entity_summary(s, entity="team", entity_id=tid, metric="corners",
+                               scope="club_league", n=1, seasons=seasons2)
+        assert multi["games"] >= res["games"]
+    finally:
+        s.close()
+
+
 def test_competition_filter_narrows_to_a_single_competition():
     s = SessionLocal()
     try:

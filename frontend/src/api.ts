@@ -167,12 +167,19 @@ export const api = {
     getJSON<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`),
   competitions: () => getJSON<Competition[]>('/competitions'),
   metrics: () => getJSON<MetricsCatalogue>('/metrics'),
-  summary: (entity: Entity, id: number, params: Record<string, string>) =>
-    getJSON<Summary>(
-      `/${entity === 'team' ? 'teams' : 'players'}/${id}/summary?${new URLSearchParams(
-        params,
-      )}`,
-    ),
+  seasons: () => getJSON<{ team: string[]; player: string[] }>('/seasons'),
+  summary: (
+    entity: Entity,
+    id: number,
+    params: Record<string, string>,
+    seasons?: string[],
+  ) => {
+    const sp = new URLSearchParams(params)
+    seasons?.forEach((s) => sp.append('seasons', s)) // season mode: repeated param
+    return getJSON<Summary>(
+      `/${entity === 'team' ? 'teams' : 'players'}/${id}/summary?${sp}`,
+    )
+  },
   fixturesCompare: (home: number, away: number, n: number) =>
     getJSON<FixtureComparison>(
       `/fixtures/compare?home=${home}&away=${away}&n=${n}`,
