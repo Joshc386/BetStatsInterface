@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, type FixtureComparison, type FixtureRow } from '../api'
 import { summarise, type MetricKind } from '../lib/aggregate'
+import { useCatalogue } from '../useCatalogue'
+import { SquadSection } from './SquadForm'
 
 type Venue = 'recent' | 'home' | 'away'
-type Mode = 'form' | 'h2h'
+type Mode = 'form' | 'h2h' | 'squad'
 
 interface MetricDef {
   label: string
@@ -52,6 +54,7 @@ export default function FixtureView() {
   const home = Number(homeId)
   const away = Number(awayId)
 
+  const { metrics } = useCatalogue()
   const [mode, setMode] = useState<Mode>('form')
   const [n, setN] = useState(10)
   const [venueHome, setVenueHome] = useState<Venue>('home')
@@ -132,19 +135,22 @@ export default function FixtureView() {
             options={[
               ['form', 'Team form'],
               ['h2h', 'Head-to-Head'],
+              ['squad', 'Squad form'],
             ]}
           />
         </Field>
-        <Field label="Last N">
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={n}
-            onChange={(e) => setN(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
-            className={`${ctrl} w-20`}
-          />
-        </Field>
+        {mode !== 'squad' && (
+          <Field label="Last N">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={n}
+              onChange={(e) => setN(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+              className={`${ctrl} w-20`}
+            />
+          </Field>
+        )}
       </div>
 
       {mode === 'form' ? (
@@ -157,13 +163,19 @@ export default function FixtureView() {
           setVenueHome={setVenueHome}
           setVenueAway={setVenueAway}
         />
-      ) : (
+      ) : mode === 'h2h' ? (
         <H2HMode
           data={data}
           meetings={meetings}
           h2hVenue={h2hVenue}
           setH2hVenue={setH2hVenue}
           record={{ hWins, draws, aWins }}
+        />
+      ) : (
+        <SquadSection
+          homeId={data.home_id}
+          awayId={data.away_id}
+          metricList={metrics?.player ?? []}
         />
       )}
     </div>

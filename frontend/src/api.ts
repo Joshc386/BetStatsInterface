@@ -100,6 +100,47 @@ export interface FixtureComparison {
   h2h: FixtureRow[] // both sides of each meeting
 }
 
+// Squad-form panel — the club's Recent squad + each member's raw appearance rows
+// at the club, which the client windows + aggregates (mirrors backend SquadForm;
+// see docs/adr/0006). Membership = club of the player's most-recent appearance.
+export interface SquadMember {
+  player_id: number
+  player: string
+  last_seen: string // his most-recent appearance; old date => likely a "ghost"
+}
+
+export interface SquadAppearanceRow {
+  player_id: number
+  player: string
+  date: string
+  season: string
+  competition_id: number
+  competition: string
+  competition_type: string
+  opponent_id: number
+  opponent: string
+  is_home: boolean
+  minutes: number | null
+  goals: number | null
+  assists: number | null
+  shots: number | null
+  sot: number | null
+  tackles: number | null
+  fouls_drawn: number | null
+  fouls_committed: number | null
+  yellows: number | null
+  reds: number | null
+  second_yellows: number | null
+  carded: boolean | null
+}
+
+export interface SquadForm {
+  team_id: number
+  team_name: string
+  members: SquadMember[]
+  rows: SquadAppearanceRow[]
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   let res: Response
   try {
@@ -138,4 +179,6 @@ export const api = {
     ),
   fixtureDetail: (fixtureId: number) =>
     getJSON<FixtureRow[]>(`/fixtures/${fixtureId}`),
+  squadForm: (teamId: number, cap = 30) =>
+    getJSON<SquadForm>(`/teams/${teamId}/squad-form?cap=${cap}`),
 }

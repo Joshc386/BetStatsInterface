@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type Entity, type SearchHit, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
+import { SingleSquad } from './SquadForm'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -186,6 +187,13 @@ export default function EntityView({ entity }: { entity: Entity }) {
         />
       )}
       {loading && !summary && <p className="text-slate-500">Loading…</p>}
+
+      {entity === 'team' && Number.isFinite(entityId) && (
+        <section className="mt-10">
+          <h2 className="mb-3 text-lg font-semibold text-slate-200">Squad form</h2>
+          <SingleSquad teamId={entityId} metricList={metrics?.player ?? []} />
+        </section>
+      )}
     </div>
   )
 }

@@ -7,6 +7,7 @@ export type Direction = 'over' | 'under'
 
 export interface Agg {
   games: number // rows considered (nulls included)
+  n: number // non-null values (the hit-rate denominator)
   total: number // counts: sum; bools: count of true
   average: number | null // counts: mean; bools: fraction true (0..1)
   hits: number | null // vs threshold, else null
@@ -51,5 +52,5 @@ export function summarise(
     pct = Math.round((1000 * hits) / n) / 10
   }
 
-  return { games, total, average, hits, pct }
+  return { games, n, total, average, hits, pct }
 }
