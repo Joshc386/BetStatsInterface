@@ -89,6 +89,55 @@ class FixtureRow(BaseModel):
     result: str | None
 
 
+class SquadMember(BaseModel):
+    """One member of a club's Recent squad (see docs/adr/0006)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    player_id: int
+    player: str
+    last_seen: dt.datetime  # his most-recent appearance; also the ghost-detector
+
+
+class SquadAppearanceRow(BaseModel):
+    """One member's appearance at the club — the raw row the client aggregates."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    player_id: int
+    player: str
+    date: dt.datetime
+    season: str
+    competition_id: int
+    competition: str
+    competition_type: str
+    opponent_id: int
+    opponent: str
+    is_home: bool
+    minutes: int | None
+    goals: int | None
+    assists: int | None
+    shots: int | None
+    sot: int | None
+    tackles: int | None
+    fouls_drawn: int | None
+    fouls_committed: int | None
+    yellows: int | None
+    reds: int | None
+    second_yellows: int | None
+    carded: bool | None
+
+
+class SquadForm(BaseModel):
+    """A club's Recent squad plus each member's raw appearance rows at the club.
+    The client windows + aggregates the rows per player (docs/adr/0006)."""
+
+    team_id: int
+    team_name: str
+    members: list[SquadMember]
+    rows: list[SquadAppearanceRow]
+
+
 class FixtureComparison(BaseModel):
     """Team form (each team's last-N) + Head-to-Head (both sides of their last-N
     meetings) as raw rows for one fixture pairing."""

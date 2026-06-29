@@ -64,12 +64,16 @@ The top four English tiers — Premier League, Championship, League One, League 
 The end-of-season knockout deciding the last promotion place (Championship/League One/League Two): teams finishing 3rd–6th contest two-legged semi-finals (4 fixtures) then a single neutral-venue final. Modelled as its **own competition** ("Championship Play-offs", **Competition Type** `club_cup`), never as part of the regular season — a play-off leg shares the same home/away orientation as a league meeting, so keeping it under `club_league` collided on the Fixture natural key and contaminated league form (see `docs/adr/0004`). Player data only (football-data.co.uk does not cover play-offs). A "last N **league** games" window therefore excludes them by scope.
 _Avoid_: treating a play-off game as a Championship (league) Fixture.
 
-**Squad** (roster):
-The set of players currently registered to a club, as listed on that club's FBref squad page — *membership*, not appearance history. A new signing who has not played yet is in the Squad; a player loaned out is not (he appears at his loan club). Maintained by the roster-refresh job (Job C) into the `squads` table. Distinct from a **Player-Match**/**Appearance** (what a player *did*): the Squad decides *who* is shown, Appearances supply *the numbers*.
+**Squad** (registered roster):
+The set of players currently *registered* to a club, as listed on that club's FBref squad page — *membership*, not appearance history. A new signing who has not played yet is in the Squad; a player loaned out is not (he appears at his loan club). The roster source for this (Job C / FBref squad page, into the `squads` table) is **deferred past v1** (see `docs/adr/0006`); v1 uses **Recent squad** instead. Distinct from a **Player-Match**/**Appearance** (what a player *did*): the Squad decides *who* is shown, Appearances supply *the numbers*.
 _Avoid_: lineup (a Squad is not a starting XI), roster as a synonym for the played-minutes set.
 
+**Recent squad** (v1 membership, appearance-derived):
+The set of players whose most-recent **Appearance** in covered data was for this club — "the squad as it last took the field." Derived at query time from each player's date-ordered **Player-Match** rows: the `team_id` of his `MAX(date)` appearance (the stored `current_team_id` is *not* trusted — it is last-written, not guaranteed chronological). No roster source. Accurate *during* a season; lags the summer transfer window — a sold player lingers in his old club's Recent squad until he debuts elsewhere in covered data (the accepted **"ghost"**), and a new signing appears only once he debuts. Always surfaced labelled as appearance-based, never implied to be the registered **Squad**. This is the v1 membership rule for **Squad form** (see `docs/adr/0006`).
+_Avoid_: calling it the "current squad" without the appearance-based caveat.
+
 **Squad form** (not lineup):
-The fixture view shows recent Summary Metrics for every player in the **Squad** — membership comes from the roster (FBref squad page), the form numbers from each player's **Appearances**. Never an auto-predicted XI. Filtering to confirmed starters is a manual user step once the official lineup is released. (FBref's squad page handles loans only roughly; precise loan/contract status via Transfermarkt is out of scope for v1.)
+Recent Summary Metrics for each player in a team's **Recent squad** (v1) — membership from recent **Appearances**, the form numbers from each player's Appearances. One reusable panel, shown on two surfaces: the **Fixture view** (both teams side by side, its primary home) and the **Team hub** (one team, a jump-off into its players). Never an auto-predicted XI. Filtering to confirmed starters is a manual user step once the official lineup is released. When the roster source lands post-v1, membership switches from **Recent squad** to **Squad** with no change to the form numbers.
 
 ### Out of scope
 

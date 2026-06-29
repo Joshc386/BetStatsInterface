@@ -23,8 +23,12 @@ from app.schemas import (
     FixtureComparison,
     FixtureRow,
     SearchHit,
+    SquadAppearanceRow,
+    SquadForm,
+    SquadMember,
     Summary,
 )
+from app.squad import squad_form
 from app.stats import entity_summary, registry
 
 app = FastAPI(title="BetStats Research API", version="0.1.0")
@@ -148,6 +152,27 @@ def player_summary(
 ) -> Summary:
     return _summary("player", player_id, metric, n, competition_id, scope, season,
                     threshold, direction, window_mode, session, team_id=team_id)
+
+
+@app.get("/teams/{team_id}/squad-form", response_model=SquadForm)
+def team_squad_form(
+    team_id: int,
+    cap: int = Query(30, ge=1, le=100, description="max appearances per member"),
+    session: Session = Depends(get_session),
+) -> SquadForm:
+    """Raw rows for the Squad-form panel — the club's Recent squad plus each
+    member's last `cap` appearances at the club. The client filters scope and
+    aggregates the rows per player (docs/adr/0006)."""
+    team = session.get(Team, team_id)
+    if team is None:
+        raise HTTPException(404, f"team {team_id} not found")
+    data = squad_form(session, team_id=team_id, cap=cap)
+    return SquadForm(
+        team_id=team_id,
+        team_name=team.canonical_name,
+        members=[SquadMember.model_validate(m) for m in data["members"]],
+        rows=[SquadAppearanceRow.model_validate(r) for r in data["rows"]],
+    )
 
 
 @app.get("/fixtures/compare", response_model=FixtureComparison)
