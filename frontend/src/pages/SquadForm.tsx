@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '../api'
 import { summarise, type MetricKind } from '../lib/aggregate'
+import { LastNInput } from '../components/LastNInput'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -94,11 +95,7 @@ export function SquadControls({
         </select>
       </Field>
       <Field label="Last N">
-        <input
-          type="number" min={1} max={30} value={c.n}
-          onChange={(e) => c.setN(Math.min(30, Math.max(1, Number(e.target.value) || 1)))}
-          className={`${ctrl} w-20`}
-        />
+        <LastNInput n={c.n} setN={c.setN} max={30} />
       </Field>
       <Field label="Scope">
         <Toggle value={c.scope} onChange={c.setScope} options={SCOPES} />

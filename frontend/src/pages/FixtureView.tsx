@@ -4,6 +4,7 @@ import { api, type FixtureComparison, type FixtureRow } from '../api'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { useCatalogue } from '../useCatalogue'
 import { SquadSection } from './SquadForm'
+import { LastNInput } from '../components/LastNInput'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -27,9 +28,6 @@ const METRICS: MetricDef[] = [
   { label: 'Fouls', kind: 'count', get: (r) => r.fouls },
   { label: 'Yellow cards', kind: 'count', get: (r) => r.yellows },
 ]
-
-const ctrl =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
 
 const byVenue = (rows: FixtureRow[], v: Venue) =>
   v === 'home' ? rows.filter((r) => r.is_home)
@@ -141,14 +139,7 @@ export default function FixtureView() {
         </Field>
         {mode !== 'squad' && (
           <Field label="Last N">
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={n}
-              onChange={(e) => setN(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
-              className={`${ctrl} w-20`}
-            />
+            <LastNInput n={n} setN={setN} max={50} />
           </Field>
         )}
       </div>

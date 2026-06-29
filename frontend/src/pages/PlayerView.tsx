@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
+import { LastNInput } from '../components/LastNInput'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -147,11 +148,7 @@ export default function PlayerView() {
           </select>
         </Field>
         <Field label="Last N">
-          <input
-            type="number" min={1} max={100} value={n}
-            onChange={(e) => setN(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
-            className={`${ctrl} w-20`}
-          />
+          <LastNInput n={n} setN={setN} max={100} />
         </Field>
         <Field label="Scope">
           <Toggle value={scope} onChange={setScope} options={SCOPES} />

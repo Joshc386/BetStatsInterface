@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type Entity, type SearchHit, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { SingleSquad } from './SquadForm'
+import { LastNInput } from '../components/LastNInput'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -110,16 +111,7 @@ export default function EntityView({ entity }: { entity: Entity }) {
         </Field>
 
         <Field label="Last N">
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={n}
-            onChange={(e) =>
-              setN(Math.min(100, Math.max(1, Number(e.target.value) || 1)))
-            }
-            className={`${ctrl} w-20`}
-          />
+          <LastNInput n={n} setN={setN} max={100} />
         </Field>
 
         <Field label="Competition">
