@@ -142,13 +142,14 @@ def team_summary(
     competition_id: int | None = Query(None, description="specific competition; omit for all"),
     scope: str | None = None,
     seasons: list[str] | None = Query(None, description="season tags (e.g. 2526); omit for last-N window"),
+    is_home: bool | None = Query(None, description="venue filter: true=home, false=away, omit=both"),
     threshold: float | None = None,
     direction: str = Query("over", pattern="^(over|under)$"),
     window_mode: str = Query("display", pattern="^(display|going_in)$"),
     session: Session = Depends(get_session),
 ) -> Summary:
     return _summary("team", team_id, metric, n, competition_id, scope, seasons,
-                    threshold, direction, window_mode, session)
+                    threshold, direction, window_mode, session, is_home=is_home)
 
 
 @app.get("/players/{player_id}/summary", response_model=Summary)

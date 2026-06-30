@@ -3,6 +3,7 @@
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
+from app.main import team_summary
 from app.models.facts import PlayerMatch, TeamMatch
 from app.stats import entity_summary, registry
 
@@ -137,6 +138,24 @@ def test_venue_split_partitions_and_opponent_narrows():
                             opponent_id=opp_id)
         assert 0 < vs["games"] <= allv["games"]
         assert all(r["opponent_id"] == opp_id for r in vs["breakdown"])
+    finally:
+        s.close()
+
+
+def test_team_endpoint_threads_is_home_through():
+    """The /teams/{id}/summary endpoint exposes is_home and threads it to
+    entity_summary (call the handler directly; FastAPI Query defaults don't
+    resolve off-server, so pass every param explicitly)."""
+    s = SessionLocal()
+    try:
+        tid = _a_team_with_data(s)
+        home = team_summary(
+            team_id=tid, metric="corners", n=100, competition_id=None, scope="club_league",
+            seasons=None, is_home=True, threshold=None, direction="over",
+            window_mode="display", session=s,
+        )
+        assert home.games > 0
+        assert all(r.is_home for r in home.breakdown)
     finally:
         s.close()
 

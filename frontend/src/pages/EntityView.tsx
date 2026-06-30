@@ -16,19 +16,29 @@ const DEFAULT_METRIC: Record<Entity, string> = {
 const fmt = (v: number | null | undefined, dp = 2) =>
   v === null || v === undefined ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(dp)
 
+// season tag "2526" -> "2025-26"
+const seasonFmt = (s: string) => (s.length === 4 ? `20${s.slice(0, 2)}-${s.slice(2)}` : s)
+
 export default function EntityView({ entity }: { entity: Entity }) {
   const { id } = useParams()
   const entityId = Number(id)
-  const { competitions, metrics, error: catError } = useCatalogue()
+  const { competitions, metrics, seasons: seasonCat, error: catError } = useCatalogue()
 
   const metricList = useMemo(
     () => (metrics ? metrics[entity] : []),
     [metrics, entity],
   )
+  const entitySeasons = useMemo(
+    () => (seasonCat ? seasonCat[entity] : []),
+    [seasonCat, entity],
+  ) // newest first
 
   // Controls
   const [metric, setMetric] = useState(DEFAULT_METRIC[entity])
+  const [winMode, setWinMode] = useState<'games' | 'seasons'>('games')
   const [n, setN] = useState(10)
+  const [seasonCount, setSeasonCount] = useState(1) // most-recent N seasons
+  const [venue, setVenue] = useState('all') // 'all' | 'home' | 'away'
   const [competitionId, setCompetitionId] = useState<string>('') // '' = all
   const [windowMode, setWindowMode] = useState<'display' | 'going_in'>('display')
   const [threshold, setThreshold] = useState<string>('')
@@ -44,13 +54,20 @@ export default function EntityView({ entity }: { entity: Entity }) {
       setMetric(DEFAULT_METRIC[entity])
   }, [metricList, entity]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // season mode: the most-recent `seasonCount` seasons; games mode: undefined
+  const selectedSeasons = useMemo(
+    () => (winMode === 'seasons' ? entitySeasons.slice(0, seasonCount) : undefined),
+    [winMode, entitySeasons, seasonCount],
+  )
+
   useEffect(() => {
     if (!Number.isFinite(entityId)) return
-    const params: Record<string, string> = {
-      metric,
-      n: String(n),
-      window_mode: windowMode,
+    const params: Record<string, string> = { metric }
+    if (winMode === 'games') {
+      params.n = String(n) // both ignored by the API in season mode
+      params.window_mode = windowMode
     }
+    if (venue !== 'all') params.is_home = venue === 'home' ? 'true' : 'false'
     if (competitionId) params.competition_id = competitionId
     if (threshold.trim() !== '') {
       params.threshold = threshold.trim()
@@ -60,14 +77,14 @@ export default function EntityView({ entity }: { entity: Entity }) {
     setLoading(true)
     setError(null)
     api
-      .summary(entity, entityId, params)
+      .summary(entity, entityId, params, selectedSeasons)
       .then((s) => !cancelled && setSummary(s))
       .catch((e) => !cancelled && setError(String(e.message ?? e)))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [entity, entityId, metric, n, competitionId, windowMode, threshold, direction])
+  }, [entity, entityId, metric, winMode, n, selectedSeasons, venue, competitionId, windowMode, threshold, direction])
 
   const ctrl =
     'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
@@ -77,7 +94,13 @@ export default function EntityView({ entity }: { entity: Entity }) {
   const compName = competitionId
     ? competitions.find((c) => String(c.id) === competitionId)?.name
     : null
-  const subtitle = `Last ${n} · ${windowMode === 'display' ? 'form' : 'going-in'} · ${
+  const windowLabel =
+    winMode === 'games'
+      ? `Last ${n} · ${windowMode === 'display' ? 'form' : 'going-in'}`
+      : seasonCount === 1
+        ? seasonFmt(entitySeasons[0] ?? '')
+        : `Last ${seasonCount} seasons`
+  const subtitle = `${windowLabel}${venue !== 'all' ? ` · ${venue === 'home' ? 'Home' : 'Away'}` : ''} · ${
     compName ?? 'all competitions'
   }`
 
@@ -110,8 +133,54 @@ export default function EntityView({ entity }: { entity: Entity }) {
           </select>
         </Field>
 
-        <Field label="Last N">
-          <LastNInput n={n} setN={setN} max={100} />
+        <Field label="Window">
+          <Toggle
+            value={winMode}
+            onChange={(v) => setWinMode(v as 'games' | 'seasons')}
+            options={[['games', 'Games'], ['seasons', 'Seasons']]}
+          />
+        </Field>
+
+        {winMode === 'games' ? (
+          <>
+            <Field label="Last N">
+              <LastNInput n={n} setN={setN} max={100} />
+            </Field>
+            <Field label="Basis">
+              <select
+                className={ctrl}
+                value={windowMode}
+                onChange={(e) =>
+                  setWindowMode(e.target.value as 'display' | 'going_in')
+                }
+              >
+                <option value="display">Form (incl. latest)</option>
+                <option value="going_in">Going-in (excl. latest)</option>
+              </select>
+            </Field>
+          </>
+        ) : (
+          <Field label="Seasons">
+            <select
+              className={ctrl}
+              value={seasonCount}
+              onChange={(e) => setSeasonCount(Number(e.target.value))}
+            >
+              {entitySeasons.map((_, i) => (
+                <option key={i} value={i + 1}>
+                  {i === 0 ? `This season (${seasonFmt(entitySeasons[0])})` : `Last ${i + 1} seasons`}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        <Field label="Venue">
+          <Toggle
+            value={venue}
+            onChange={setVenue}
+            options={[['all', 'All'], ['home', 'Home'], ['away', 'Away']]}
+          />
         </Field>
 
         <Field label="Competition">
@@ -126,19 +195,6 @@ export default function EntityView({ entity }: { entity: Entity }) {
                 {c.name}
               </option>
             ))}
-          </select>
-        </Field>
-
-        <Field label="Window">
-          <select
-            className={ctrl}
-            value={windowMode}
-            onChange={(e) =>
-              setWindowMode(e.target.value as 'display' | 'going_in')
-            }
-          >
-            <option value="display">Form (incl. latest)</option>
-            <option value="going_in">Going-in (excl. latest)</option>
           </select>
         </Field>
 
@@ -235,6 +291,30 @@ function OpponentPicker({ teamId }: { teamId: number }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+function Toggle({
+  value, onChange, options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: Array<[string, string]>
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
+      {options.map(([v, text]) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`px-3 py-1.5 text-sm ${
+            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+          }`}
+        >
+          {text}
+        </button>
+      ))}
     </div>
   )
 }
