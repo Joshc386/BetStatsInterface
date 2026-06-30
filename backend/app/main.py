@@ -114,7 +114,8 @@ def search(q: str = Query(min_length=2), limit: int = 20,
 
 
 def _summary(entity, entity_id, metric, n, competition_id, scope, seasons, threshold,
-             direction, window_mode, session, team_id=None, min_minutes=0) -> Summary:
+             direction, window_mode, session, team_id=None, min_minutes=0,
+             is_home=None, opponent_id=None) -> Summary:
     if metric not in registry(entity):
         raise HTTPException(404, f"unknown {entity} metric '{metric}'. See /metrics.")
     if scope is not None and scope not in SCOPES:
@@ -124,6 +125,7 @@ def _summary(entity, entity_id, metric, n, competition_id, scope, seasons, thres
     result = entity_summary(
         session, entity=entity, entity_id=entity_id, metric=metric, n=n,
         competition_id=competition_id, scope=scope, team_id=team_id,
+        is_home=is_home, opponent_id=opponent_id,
         min_minutes=min_minutes, seasons=seasons or None,
         threshold=threshold, direction=direction, window_mode=window_mode,
     )
@@ -158,6 +160,8 @@ def player_summary(
     scope: str | None = None,
     seasons: list[str] | None = Query(None, description="season tags (e.g. 2526); omit for last-N window"),
     team_id: int | None = Query(None, description="isolate one club Spell (players only)"),
+    is_home: bool | None = Query(None, description="venue filter: true=home, false=away, omit=both"),
+    opponent_id: int | None = Query(None, description="isolate games vs one opponent"),
     min_minutes: int = Query(0, ge=0, description="drop appearances under this many minutes"),
     threshold: float | None = None,
     direction: str = Query("over", pattern="^(over|under)$"),
@@ -166,7 +170,7 @@ def player_summary(
 ) -> Summary:
     return _summary("player", player_id, metric, n, competition_id, scope, seasons,
                     threshold, direction, window_mode, session, team_id=team_id,
-                    min_minutes=min_minutes)
+                    min_minutes=min_minutes, is_home=is_home, opponent_id=opponent_id)
 
 
 @app.get("/teams/{team_id}/squad-form", response_model=SquadForm)

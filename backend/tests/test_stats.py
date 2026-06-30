@@ -115,6 +115,32 @@ def test_season_window_filters_to_chosen_seasons_and_ignores_n():
         s.close()
 
 
+def test_venue_split_partitions_and_opponent_narrows():
+    """Home and away must be a clean partition of all games, and an opponent
+    filter must isolate exactly that opponent's meetings (filter-then-window)."""
+    s = SessionLocal()
+    try:
+        pid = s.scalar(select(PlayerMatch.player_id).limit(1))
+        if pid is None:
+            return  # no player data loaded in this environment
+        allv = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000)
+        home = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000,
+                              is_home=True)
+        away = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000,
+                              is_home=False)
+        assert home["games"] + away["games"] == allv["games"]
+        assert all(r["is_home"] for r in home["breakdown"])
+        assert all(not r["is_home"] for r in away["breakdown"])
+
+        opp_id = allv["breakdown"][0]["opponent_id"]
+        vs = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000,
+                            opponent_id=opp_id)
+        assert 0 < vs["games"] <= allv["games"]
+        assert all(r["opponent_id"] == opp_id for r in vs["breakdown"])
+    finally:
+        s.close()
+
+
 def test_competition_filter_narrows_to_a_single_competition():
     s = SessionLocal()
     try:

@@ -34,6 +34,7 @@ export interface HitRate {
 
 export interface BreakdownRow {
   date: string
+  opponent_id?: number | null
   opponent: string | null
   is_home: boolean
   value: number | null

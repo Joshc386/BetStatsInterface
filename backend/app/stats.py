@@ -60,6 +60,8 @@ def entity_summary(
     competition_id: int | None = None,  # a specific competition; None = all competitions
     scope: str | None = None,  # optional coarser filter by competition_type
     team_id: int | None = None,  # players only: isolate one club Spell
+    is_home: bool | None = None,  # venue filter: True=home, False=away, None=both
+    opponent_id: int | None = None,  # isolate games vs one specific opponent
     min_minutes: int = 0,  # players only: drop sub-floor appearances before windowing
     seasons: list[str] | None = None,
     threshold: float | None = None,
@@ -75,6 +77,7 @@ def entity_summary(
     cols = [
         table.date,
         table.is_home,
+        table.opponent_id.label("opponent_id"),
         opp.canonical_name.label("opponent"),
         getattr(table, attr).label("value"),
     ]
@@ -96,6 +99,10 @@ def entity_summary(
         conds.append(table.competition_type == scope)
     if team_id is not None:
         conds.append(table.team_id == team_id)
+    if is_home is not None:
+        conds.append(table.is_home.is_(is_home))
+    if opponent_id is not None:
+        conds.append(table.opponent_id == opponent_id)
     if min_minutes > 0 and entity == "player":
         # filter-then-window: keep only appearances of >= min_minutes, before LIMIT n
         conds.append(table.minutes >= min_minutes)
@@ -174,6 +181,7 @@ def entity_summary(
         "breakdown": [
             {
                 "date": r.date,
+                "opponent_id": r.opponent_id,
                 "opponent": r.opponent,
                 "is_home": r.is_home,
                 "value": r.value,

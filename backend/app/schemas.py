@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 class BreakdownRow(BaseModel):
     date: dt.datetime
+    opponent_id: int | None = None
     opponent: str | None
     is_home: bool
     value: float | None

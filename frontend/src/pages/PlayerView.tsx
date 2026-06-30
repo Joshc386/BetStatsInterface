@@ -23,7 +23,7 @@ const SCOPES: Array<[string, string]> = [
   ['all', 'All'],
 ]
 
-type Segment = 'team' | 'competition' | 'none'
+type Segment = 'team' | 'competition' | 'opponent' | 'none'
 
 const ctrl =
   'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
@@ -43,12 +43,16 @@ function groupBreakdown(rows: BreakdownRow[], by: Segment): Group[] | null {
   const newestFirst = [...rows].reverse() // API breakdown is oldest->newest
   const order: number[] = []
   const map = new Map<number, Group>()
+  const keyOf = (r: BreakdownRow) =>
+    by === 'team' ? r.team_id : by === 'opponent' ? r.opponent_id : r.competition_id
+  const labelOf = (r: BreakdownRow) =>
+    by === 'team' ? r.team : by === 'opponent' ? r.opponent : r.competition
   for (const r of newestFirst) {
-    const k = (by === 'team' ? r.team_id : r.competition_id) ?? -1
+    const k = keyOf(r) ?? -1
     if (!map.has(k)) {
       map.set(k, {
         key: k,
-        label: (by === 'team' ? r.team : r.competition) ?? '—',
+        label: labelOf(r) ?? '—',
         rows: [],
         games: 0,
         total: 0,
@@ -75,6 +79,7 @@ export default function PlayerView() {
   const [n, setN] = useState(10)
   const [seasonCount, setSeasonCount] = useState(1) // most-recent N seasons
   const [scope, setScope] = useState('club_league') // default: league (scope-clean)
+  const [venue, setVenue] = useState('all') // 'all' | 'home' | 'away'
   const [segment, setSegment] = useState<Segment>('team')
   const [threshold, setThreshold] = useState('')
   const [direction, setDirection] = useState<'over' | 'under'>('over')
@@ -82,6 +87,7 @@ export default function PlayerView() {
   // drill-in filters set by clicking a segment
   const [teamFilter, setTeamFilter] = useState<{ id: number; name: string } | null>(null)
   const [compFilter, setCompFilter] = useState<{ id: number; name: string } | null>(null)
+  const [opponentFilter, setOpponentFilter] = useState<{ id: number; name: string } | null>(null)
 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -102,8 +108,10 @@ export default function PlayerView() {
     const params: Record<string, string> = { metric }
     if (winMode === 'games') params.n = String(n) // ignored by the API in season mode
     if (scope !== 'all') params.scope = scope
+    if (venue !== 'all') params.is_home = venue === 'home' ? 'true' : 'false'
     if (teamFilter) params.team_id = String(teamFilter.id)
     if (compFilter) params.competition_id = String(compFilter.id)
+    if (opponentFilter) params.opponent_id = String(opponentFilter.id)
     if (threshold.trim() !== '') {
       params.threshold = threshold.trim()
       params.direction = direction
@@ -121,7 +129,7 @@ export default function PlayerView() {
     return () => {
       cancelled = true
     }
-  }, [playerId, metric, winMode, n, selectedSeasons, scope, teamFilter, compFilter, threshold, direction, minMinutes])
+  }, [playerId, metric, winMode, n, selectedSeasons, scope, venue, teamFilter, compFilter, opponentFilter, threshold, direction, minMinutes])
 
   const groups = useMemo(
     () => (summary ? groupBreakdown(summary.breakdown, segment) : null),
@@ -146,13 +154,16 @@ export default function PlayerView() {
       </div>
 
       {/* active drill-in filters */}
-      {(teamFilter || compFilter) && (
+      {(teamFilter || compFilter || opponentFilter) && (
         <div className="mb-3 flex flex-wrap gap-2">
           {teamFilter && (
             <Chip label={`Club: ${teamFilter.name}`} onClear={() => setTeamFilter(null)} />
           )}
           {compFilter && (
             <Chip label={`Competition: ${compFilter.name}`} onClear={() => setCompFilter(null)} />
+          )}
+          {opponentFilter && (
+            <Chip label={`vs ${opponentFilter.name}`} onClear={() => setOpponentFilter(null)} />
           )}
         </div>
       )}
@@ -195,11 +206,18 @@ export default function PlayerView() {
         <Field label="Scope">
           <Toggle value={scope} onChange={setScope} options={SCOPES} />
         </Field>
+        <Field label="Venue">
+          <Toggle
+            value={venue}
+            onChange={setVenue}
+            options={[['all', 'All'], ['home', 'Home'], ['away', 'Away']]}
+          />
+        </Field>
         <Field label="Segment by">
           <Toggle
             value={segment}
             onChange={(v) => setSegment(v as Segment)}
-            options={[['team', 'Team'], ['competition', 'Competition'], ['none', 'None']]}
+            options={[['team', 'Team'], ['competition', 'Competition'], ['opponent', 'Opponent'], ['none', 'None']]}
           />
         </Field>
         <Field label="Threshold (hit-rate)">
@@ -232,8 +250,10 @@ export default function PlayerView() {
         <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
           <p className="mb-3 text-sm text-slate-500">
             {windowLabel} · {scopeName}
+            {venue !== 'all' ? ` · ${venue === 'home' ? 'Home' : 'Away'}` : ''}
             {teamFilter ? ` · ${teamFilter.name}` : ''}
             {compFilter ? ` · ${compFilter.name}` : ''}
+            {opponentFilter ? ` · vs ${opponentFilter.name}` : ''}
           </p>
 
           {summary.games === 0 ? (
@@ -267,11 +287,12 @@ export default function PlayerView() {
                   groups={groups}
                   metric={summary.metric}
                   segment={segment}
-                  onPick={(g) =>
-                    segment === 'team'
-                      ? setTeamFilter({ id: g.key, name: g.label })
-                      : setCompFilter({ id: g.key, name: g.label })
-                  }
+                  onPick={(g) => {
+                    const f = { id: g.key, name: g.label }
+                    if (segment === 'team') setTeamFilter(f)
+                    else if (segment === 'opponent') setOpponentFilter(f)
+                    else setCompFilter(f)
+                  }}
                 />
               ) : (
                 <FlatBreakdown rows={summary.breakdown} />
