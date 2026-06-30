@@ -99,7 +99,10 @@ python -m venv .venv
 .venv/Scripts/python.exe -m pytest                         # tests
 
 # dev
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload   # API at /docs (CORS allows :5173)
+# WARNING: --reload does NOT reliably reload here — this repo lives under OneDrive,
+# whose virtual filesystem breaks watchfiles, so --reload silently serves STALE code.
+# Run plain uvicorn and restart it manually after editing backend code.
+.venv/Scripts/python.exe -m uvicorn app.main:app   # API at /docs (CORS allows :5173)
 # frontend dev server (Phase 7 — Vite + React + TS + Tailwind, in ../frontend):
 #   cd frontend && npm install && npm run dev -- --port 5173   # UI at http://localhost:5173
 #   reads VITE_API_BASE (default http://localhost:8000); copy frontend/.env.example -> .env to override
