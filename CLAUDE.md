@@ -113,6 +113,9 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.players 2526 "Premier League" 2      # bounded smoke test (first 2 matches; no watchdog)
 # (players.py alone has no per-fetch timeout — a Cloudflare re-challenge can hang it; run_backfill supervises it)
 
+# team identity (Phase A — ADR 0007, zero-network, idempotent)
+.venv/Scripts/python.exe -m ingestion.backfill_team_fbref_id   # populate teams.fbref_id from cached FBref match pages
+
 # ingestion  (TODO — Phase 5)
 # nightly incremental / roster refresh
 ```

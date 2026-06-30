@@ -16,6 +16,7 @@ NOTE: live FBref fetches require the VPN OFF (Cloudflare blocks the VPN exit IP)
 from __future__ import annotations
 
 import datetime as dt
+import re
 import time
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch
 from app.models.reference import Competition, Player, Team
-from ingestion.names import clean_name
+from ingestion.names import clean_name, normalise_for_match
 
 # soccerdata writes each fetched match page here; we re-read it to recover the
 # per-player FBref ids that read_player_match_stats drops.
@@ -108,20 +109,62 @@ def canonical_team_name(fbref_name: str) -> str:
     return FBREF_TEAM_ALIASES.get(name, name)
 
 
-def resolve_fbref_team(session: Session, fbref_name: str) -> Team:
-    """Return the canonical Team for an FBref team name.
+def match_existing_team(session: Session, fbref_name: str) -> Team | None:
+    """Find the canonical Team for an FBref name deterministically, or None.
 
-    Raises UnknownTeamError if no canonical row matches — we never create teams
-    from FBref (the canonical universe comes from football-data.co.uk); a miss
-    means a missing alias, which must be fixed, not silently papered over.
+    Resolution is explicit-alias / exact-canonical first, then a normalised-name
+    match (accent/case/FC-fold) against `canonical_name` OR `fdcouk_name`. Never
+    fuzzy. Returns None when no team matches (a club outside our universe, e.g. a
+    European-cup opponent) or when the normalised key is ambiguous (>1 team) —
+    the caller decides whether a None is fatal (ingest) or expected (backfill).
     """
     canonical = canonical_team_name(fbref_name)
     team = session.scalar(select(Team).where(Team.canonical_name == canonical))
+    if team is not None:
+        return team
+    key = normalise_for_match(fbref_name)
+    if not key:
+        return None
+    matches: dict[int, Team] = {}
+    for t in session.scalars(select(Team)):
+        candidates = [t.canonical_name]
+        if t.fdcouk_name:
+            candidates.append(t.fdcouk_name)
+        if any(normalise_for_match(c) == key for c in candidates):
+            matches[t.id] = t
+    if len(matches) == 1:
+        return next(iter(matches.values()))
+    return None
+
+
+def resolve_fbref_team(
+    session: Session, fbref_name: str, fbref_id: str | None = None
+) -> Team:
+    """Return the canonical Team for an FBref team, id-first then name/alias.
+
+    When `fbref_id` is known (parsed from the match page), resolve by it first —
+    robust to spelling drift, mirroring how players key on a stable id. On a miss
+    (id not yet backfilled), fall back to deterministic name matching and, if a
+    row is found, **attach** the fbref_id to it (the cross-source seam link) so
+    later lookups are id-first.
+
+    Raises UnknownTeamError if nothing matches — we never create teams from FBref
+    in the league path (the canonical universe comes from football-data.co.uk); a
+    miss means a missing alias, which must be fixed, not silently papered over.
+    """
+    if fbref_id:
+        team = session.scalar(select(Team).where(Team.fbref_id == fbref_id))
+        if team is not None:
+            return team
+
+    team = match_existing_team(session, fbref_name)
     if team is None:
         raise UnknownTeamError(
-            f"FBref team {fbref_name!r} -> {canonical!r} not found in teams; "
-            "add an entry to FBREF_TEAM_ALIASES."
+            f"FBref team {fbref_name!r} -> {canonical_team_name(fbref_name)!r} not "
+            "found in teams; add an entry to FBREF_TEAM_ALIASES."
         )
+    if fbref_id and not team.fbref_id:
+        team.fbref_id = fbref_id  # attach the seam handle for next time
     return team
 
 
@@ -395,6 +438,37 @@ def parse_player_ids(match_html: str) -> dict[str, str]:
     return out
 
 
+_TEAM_TABLE_ID = re.compile(r"^stats_([0-9a-f]+)_summary$")
+_CAPTION_SUFFIX = " Player Stats Table"
+
+
+def parse_team_ids(match_html: str) -> dict[str, str]:
+    """Map ``team display name -> FBref team id`` for both squads in a match page.
+
+    Each squad's summary table carries the team's FBref id in its element id
+    (``stats_<fbref_id>_summary``) and the team's name in its ``<caption>``
+    (``"<Team> Player Stats Table"``). Pairing the two recovers the team id with
+    no network call — the ids are already in the cached HTML. The caption uses
+    FBref's *schedule* short spelling (e.g. "Manchester Utd"), so callers
+    reconcile it through the same alias/normalisation path as other FBref names.
+    """
+    doc = lxml_html.fromstring(match_html)
+    out: dict[str, str] = {}
+    for table in doc.xpath('//table[contains(@id, "_summary")]'):
+        m = _TEAM_TABLE_ID.match(table.get("id") or "")
+        if not m:
+            continue
+        captions = table.xpath("./caption")
+        if not captions:
+            continue
+        name = captions[0].text_content().strip()
+        if name.endswith(_CAPTION_SUFFIX):
+            name = name[: -len(_CAPTION_SUFFIX)].strip()
+        if name:
+            out[name] = m.group(1)
+    return out
+
+
 def _pending_fixtures(
     session: Session, competition_ids: list[int], season: str
 ):
@@ -494,6 +568,11 @@ def backfill_season(
                     encoding="utf-8"
                 )
                 player_ids = parse_player_ids(html)
+                # Capture each squad's FBref id from the same cached page and
+                # attach it to the canonical row (the seam link), so identity is
+                # id-backed going forward — fail-loud on an unknown league club.
+                for team_name, team_fbref_id in parse_team_ids(html).items():
+                    resolve_fbref_team(session, team_name, fbref_id=team_fbref_id)
                 fixture = session.get(Fixture, fixture_id)
                 n = ingest_match(
                     session, fixture, ctype_by_comp[fixture.competition_id],

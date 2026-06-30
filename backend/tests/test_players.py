@@ -5,6 +5,7 @@ The DB idempotency test runs in a rolled-back session and leaves nothing behind.
 Requires the soccerdata FBref cache (match_cc5b4244.html etc.) and DATABASE_URL.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -16,13 +17,15 @@ from ingestion.players import (
     canonical_team_name,
     ingest_match,
     link_fixtures,
+    match_existing_team,
     parse_player_ids,
+    parse_team_ids,
     resolve_fbref_team,
     summary_to_player_stats,
 )
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch
-from app.models.reference import Competition, Player
+from app.models.reference import Competition, Player, Team
 
 CACHE = Path.home() / "soccerdata" / "data" / "FBref"
 # PL 2024-25, Manchester Utd 1-0 Fulham (matchweek 1).
@@ -89,6 +92,25 @@ def test_parse_player_ids_is_scoped_to_lineups():
     assert "Paul Scholes" not in ids
 
 
+def test_parse_team_ids_pairs_caption_to_fbref_id():
+    """Each squad summary table is `stats_<fbref_id>_summary` with a caption
+    `<TeamName> Player Stats Table`; the parser pairs the two for both sides."""
+    teams = parse_team_ids(_html(MATCH_CC5B4244))
+    assert teams == {
+        "Manchester Utd": "19538871",
+        "Fulham": "fd962109",
+    }
+
+
+@pytest.mark.parametrize("match_id", CACHED_MATCH_IDS)
+def test_parse_team_ids_returns_exactly_two_hex_ids(match_id):
+    """A normal match page has exactly two squads; ids are FBref's 8-hex form."""
+    teams = parse_team_ids(_html(CACHE / f"match_{match_id}.html"))
+    assert len(teams) == 2
+    for fbref_id in teams.values():
+        assert re.fullmatch(r"[0-9a-f]{8}", fbref_id), fbref_id
+
+
 @pytest.mark.parametrize("match_id", CACHED_MATCH_IDS)
 def test_every_df_player_resolves_to_an_id(match_id):
     """The HTML id map must cover every player in the summary DataFrame.
@@ -143,6 +165,62 @@ def test_resolve_fbref_team_raises_on_unknown_team():
     try:
         with pytest.raises(UnknownTeamError):
             resolve_fbref_team(session, "__No Such Club FC__")
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_match_existing_team_by_normalised_name():
+    """A name differing only by an FC suffix / accent / case still resolves,
+    with no alias entry — the normalised fallback covers it. Rolled back."""
+    session = SessionLocal()
+    try:
+        t = Team(canonical_name="__ZZ Normá Rovers__", fdcouk_name="__ZZ Normá Rovers__")
+        session.add(t)
+        session.flush()
+        got = match_existing_team(session, "__ZZ Norma Rovers__ FC")
+        assert got is not None and got.id == t.id
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_match_existing_team_unknown_returns_none():
+    session = SessionLocal()
+    try:
+        assert match_existing_team(session, "__ZZ Out Of Universe Club__") is None
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_resolve_fbref_team_id_first_ignores_name():
+    """When the team already carries the fbref_id, resolution is by id — the
+    display name is not even consulted (robust to spelling drift). Rolled back."""
+    session = SessionLocal()
+    try:
+        t = Team(canonical_name="__ZZ Id First Town__", fbref_id="zzid0001")
+        session.add(t)
+        session.flush()
+        got = resolve_fbref_team(session, "A Totally Different Spelling", fbref_id="zzid0001")
+        assert got.id == t.id
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_resolve_fbref_team_attaches_id_on_name_match():
+    """Resolving by name while passing a new fbref_id attaches it (the seam
+    link) so subsequent lookups are id-first. Rolled back."""
+    session = SessionLocal()
+    try:
+        t = Team(canonical_name="__ZZ Attach United__")
+        session.add(t)
+        session.flush()
+        assert t.fbref_id is None
+        got = resolve_fbref_team(session, "__ZZ Attach United__", fbref_id="zzid0002")
+        assert got.id == t.id
+        assert got.fbref_id == "zzid0002"
     finally:
         session.rollback()
         session.close()

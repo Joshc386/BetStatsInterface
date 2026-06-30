@@ -8,13 +8,15 @@ are mapped to these canonical rows via an explicit alias map, populating fbref_i
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models.reference import Competition, Team
 from ingestion.fdcouk import read_results
-from ingestion.names import clean_name
+from ingestion.names import clean_name, normalise_for_match
 
 # Recent seasons define the current team universe. Historical backfill (Phase 3)
 # upserts any older teams through the same resolver, so this set is a starting point.
@@ -33,6 +35,25 @@ def resolve_fdcouk_team(session: Session, fdcouk_name: str) -> Team:
         session.add(team)
         session.flush()  # assign id
     return team
+
+
+def find_duplicate_teams(session: Session) -> list[tuple[str, list[int]]]:
+    """Surface canonical rows that collide on a normalised name (a silent split).
+
+    Two distinct `teams` rows whose `canonical_name` or `fdcouk_name` normalise to
+    the same key mean one real club has split into two — the exact failure the
+    `fbref_id` identity spine (ADR 0007) exists to prevent. Read-only; returns
+    ``[(normalised_key, [team_id, ...]), ...]`` for every colliding group, empty
+    when the table is clean. Backs the standing regression guard in the tests.
+    """
+    by_key: dict[str, set[int]] = defaultdict(set)
+    for team in session.scalars(select(Team)):
+        for name in {team.canonical_name, team.fdcouk_name}:
+            if name:
+                by_key[normalise_for_match(name)].add(team.id)
+    return [
+        (key, sorted(ids)) for key, ids in sorted(by_key.items()) if len(ids) > 1
+    ]
 
 
 def build_team_universe(seasons: list[str] = UNIVERSE_SEASONS) -> dict:
