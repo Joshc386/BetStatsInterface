@@ -49,7 +49,7 @@ A player's continuous run of **Appearances** at one club, bounded by a transfer.
 _Avoid_: stint; "career" (a career is all of a player's spells).
 
 **Head-to-Head** (H2H):
-The set of past **Fixtures** between two specific teams — a **Rolling Window** filtered to one opponent. Drives the **Fixture view**'s meetings list and its aggregate Summary Metrics ("BTTS in 4 of the last 6 meetings"). Fixture-level Metrics (BTTS, total goals) give one figure per meeting; per-team Metrics (goals-for, clean-sheet) differ by side. League-only in v1 (no cup/international team data); spans all held seasons, and degrades gracefully when two teams have few or no meetings.
+The set of past **Fixtures** between two specific teams — a **Rolling Window** filtered to one opponent. Drives the **Fixture view**'s meetings list and its aggregate Summary Metrics ("BTTS in 4 of the last 6 meetings"). Fixture-level Metrics (BTTS, total goals) give one figure per meeting; per-team Metrics (goals-for, clean-sheet) differ by side. League-only in v1 — H2H is team-level, so it stays league-only until cup **team** data lands (cup *player* data does not feed it); spans all held seasons, and degrades gracefully when two teams have few or no meetings.
 _Avoid_: form (form is measured vs all opponents; H2H is vs one specific team).
 
 ### Scope & coverage
@@ -58,7 +58,11 @@ _Avoid_: form (form is measured vs all opponents; H2H is vs one specific team).
 The scope tag on every fact row, one of `club_league` | `club_cup` | `club_european` | `international`. "Last N games" is meaningless without it — a window is always read within a scope.
 
 **v1 scope**:
-The top four English tiers — Premier League, Championship, League One, League Two — `club_league` only. **Team** data is confident across all four (football-data.co.uk). **Player** data is confident for PL + Championship but **best-effort for League One / League Two** (Opta's lower-tier coverage was always thin, compounded by FBref's Jan-2026 removal) — verified at backfill and labelled in the UI as "covered competitions only", never implied complete.
+The top four English tiers — Premier League, Championship, League One, League Two — `club_league` first, now extending into domestic cups (`club_cup`). **Team** data is confident across all four tiers (football-data.co.uk), league-only. **Player** data is confident for PL + Championship but **best-effort for League One / League Two** (Opta's lower-tier coverage was always thin, compounded by FBref's Jan-2026 removal) — verified at backfill and labelled in the UI as "covered competitions only", never implied complete. The first scope expansion adds **FA Cup / EFL Cup player data** for **Covered ties** (see below), team-level cup data deferred (see `docs/adr/0008`).
+
+**Covered tie**:
+A cup **Fixture** the project ingests: a tie with **at least one Premier League or Championship club in that season**. Decided season-aware from `team_match` (the club has league rows in PL/Championship that season), so a club relegated out of the top two does not pull its cup ties into an untracked season. This excludes the lower-/non-league-only early rounds; the opponent's players (often League One/Two) are ingested too as a bonus toward later coverage. The filter loosens as League One/Two player data lands.
+_Avoid_: treating every tie in a cup's schedule as in scope.
 
 **Promotion Play-offs**:
 The end-of-season knockout deciding the last promotion place (Championship/League One/League Two): teams finishing 3rd–6th contest two-legged semi-finals (4 fixtures) then a single neutral-venue final. Modelled as its **own competition** ("Championship Play-offs", **Competition Type** `club_cup`), never as part of the regular season — a play-off leg shares the same home/away orientation as a league meeting, so keeping it under `club_league` collided on the Fixture natural key and contaminated league form (see `docs/adr/0004`). Player data only (football-data.co.uk does not cover play-offs). A "last N **league** games" window therefore excludes them by scope.

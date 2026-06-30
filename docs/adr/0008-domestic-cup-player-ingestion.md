@@ -1,0 +1,71 @@
+# Domestic-cup player ingestion (FA Cup, EFL Cup)
+
+**Status:** accepted
+
+The first expansion beyond `club_league`: adding **FA Cup** and **EFL Cup** data so the
+Cups scope (already present in the UI, and exercised only by the Championship play-offs
+to date) carries real domestic-cup form. A sourcing spike confirmed soccerdata's FBref
+reader is config-driven (any competition in FBref's `/comps/` index works via a
+`LEAGUE_DICT` entry — FA Cup is comp 514, EFL Cup 690) and that the player-ingest path is
+competition-agnostic (match player-stat pages are identical across competitions).
+
+## Decision
+
+**Ingest cup data player-only first, scoped to ties involving a tracked club, via a
+dedicated entrypoint that creates fixtures from the FBref cup schedule.**
+
+- **Player data only in this pass; team data layered later.** `team_match` is
+  football-data.co.uk-only and that source does not cover cups; an FBref→`team_match`
+  path does not exist. Player-only reuses the ready, competition-agnostic player pipeline
+  and ships the higher-value half (rotation/cup-prop research). Cup *team* rows
+  (from FBref scorelines/match team-stats) are a deferred follow-up — the same deferral
+  ADR 0004 made for the play-offs. While team data is absent, Head-to-Head stays
+  league-only as today.
+- **Scope = ties with at least one PL or Championship club, season-aware.** "Covered"
+  is decided per season from `team_match` (the club has league rows in PL/Championship
+  that season), so a club relegated out of the top two does not drag its cup ties in for
+  an untracked season. This auto-excludes the lower-/non-league-only early rounds.
+  `ingest_match` reads both squads, so the opponent's players (often League One/Two) come
+  along as a bonus toward future coverage. The filter loosens naturally once League
+  One/Two player data lands.
+- **Dedicated cup backfill entrypoint, not an extension of `link_fixtures`.** League and
+  play-off ingestion *match* pre-existing football-data.co.uk fixtures; cups have none,
+  so the cup path **creates** the Fixture from the FBref cup schedule: `read_schedule`
+  → filter to covered ties → get-or-create the cup Fixture → resolve both teams by
+  `fbref_id` (auto-create + log unknown opponents, per ADR 0007) → `ingest_match`
+  (reused unchanged). Add `ENG-FA Cup`/`ENG-EFL Cup` to `soccerdata_config/league_dict.json`
+  and seed two `club_cup` competitions: **"FA Cup"** and **"EFL Cup"**
+  (`country='England'`, `tier=None`, `fbref_key` set, `fdcouk_key=None`) — same shape as
+  "Championship Play-offs".
+- **Seasons: 2324, 2425, 2526** — aligned to existing PL/Championship player coverage.
+  Greater depth is a later, deliberate pass.
+- **All domestic knockouts stay `club_cup`** (FA Cup, EFL Cup, play-offs); they remain
+  distinguishable by `competition_id`, so the existing competition filter / segment-by
+  isolates "FA Cup form" vs "EFL Cup form" without a new enum value (as ADR 0004 chose).
+
+## Considered options
+
+- **Team + player in one pass** — rejected for now; it requires building the absent
+  FBref→`team_match` path. Layered (player → team) ships value sooner and keeps the
+  passes reviewable.
+- **Ingest the whole cup** (all rounds) — rejected; it creates masses of non-league
+  teams and untracked player rows and triggers fail-loud reconciliation on every unknown
+  name, for data outside scope.
+- **Fail-loud on unknown opponents** (the league pattern) — rejected for cups; a random
+  draw cannot be pre-aliased, and stopping would silently drop a tracked club's real cup
+  tie (including the giant-killings most worth seeing). Auto-create + log instead
+  (ADR 0007).
+
+## Consequences
+
+- Cup player rows appear under the Cups scope immediately (UI already supports it);
+  segment-by-competition separates the three knockouts.
+- Depends on ADR 0007: cup opponents are resolved/auto-created by `fbref_id`, so the
+  expansion does not breed duplicate teams.
+- A cup-specific idempotency/regression guard asserts one Fixture ↔ one `fbref_match_id`
+  — the natural key `(competition_id, season, home, away)` is collision-safe for cups
+  (replays and two-legged semis swap venue → distinct orientation; FA/EFL/league
+  meetings of the same clubs differ by `competition_id`), but the play-offs proved this
+  is exactly where contamination sneaks in, so it is guarded explicitly.
+- The pattern generalises to the other domestic knockouts and, with the `LEAGUE_DICT`
+  precedent, to European/international competitions later.
