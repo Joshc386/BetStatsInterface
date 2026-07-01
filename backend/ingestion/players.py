@@ -96,6 +96,20 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "Rotherham United": "Rotherham",
     "Sheffield Wednesday": "Sheffield Weds",
     "West Bromwich Albion": "West Brom",
+    # Domestic-cup (ADR 0008) lower-league opponents drawn against covered clubs.
+    # The FA Cup schedule/caption spells them short while the per-match player df
+    # spells them in full (the two-spelling trap) — alias BOTH to the existing
+    # football-data canonical, else the tie fail-loud skips. Found by the FA Cup
+    # 2024-25 backfill (7 covered ties dropped).
+    "Peterborough": "Peterboro",  # schedule/caption (canonical is fd.co.uk 'Peterboro')
+    "Peterborough United": "Peterboro",  # player-df full name
+    "Accrington Stanley": "Accrington",  # player-df (caption 'Accrington' already matches)
+    "Doncaster Rovers": "Doncaster",  # player-df
+    "Wycombe Wanderers": "Wycombe",  # player-df
+    # Dagenham & Redbridge are non-league (outside the 4 tiers) — no canonical row,
+    # so the caption 'Dag & Red' auto-creates it (ADR 0007); alias the player-df
+    # full name onto that created spelling so ingest resolves to the same row.
+    "Dagenham & Redbridge": "Dag & Red",
 }
 
 

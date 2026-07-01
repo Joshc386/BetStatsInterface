@@ -193,6 +193,49 @@ def test_get_or_create_cup_fixture_is_idempotent():
         session.rollback()
 
 
+def test_fbref_player_df_long_names_resolve_to_existing_canonicals():
+    """FA Cup player-df spells lower-league clubs in full ('Accrington Stanley')
+    while football-data canonical rows use the short name ('Accrington'). Both the
+    player-df spelling and the schedule/caption spelling must resolve to the
+    existing row, not fail-loud — the two-spelling seam that silently dropped 7
+    covered FA Cup 2024-25 ties (ADR 0008)."""
+    from ingestion.players import match_existing_team
+
+    cases = {
+        "Peterborough United": "Peterboro",  # player-df spelling
+        "Peterborough": "Peterboro",  # schedule / caption spelling
+        "Accrington Stanley": "Accrington",
+        "Doncaster Rovers": "Doncaster",
+        "Wycombe Wanderers": "Wycombe",
+    }
+    with SessionLocal() as session:
+        for fbref_name, canonical in cases.items():
+            team = match_existing_team(session, fbref_name)
+            assert team is not None, f"{fbref_name!r} did not resolve (needs alias)"
+            assert team.canonical_name == canonical, (
+                f"{fbref_name!r} -> {team.canonical_name!r}, expected {canonical!r}"
+            )
+
+
+def test_two_spelling_new_opponent_resolves_to_same_row():
+    """A genuinely-new non-league opponent is spelled one way in the schedule
+    caption ('Dag & Red', which keys/auto-creates the row) and another in the
+    per-match player df ('Dagenham & Redbridge'). Both must resolve to the SAME
+    team via the alias — never fail-loud, else the tie AND the new team roll back
+    (the second half of the FA Cup 2024-25 drop). State-independent: holds whether
+    or not the row is already ingested. Rolled back."""
+    from ingestion.players import resolve_fbref_team
+
+    with SessionLocal() as session:
+        by_caption, _ = resolve_or_create_fbref_team(
+            session, "Dag & Red", fbref_id="zzdag_seam"
+        )
+        # mirror ingest_match: name-only resolution of the player-df spelling
+        by_player_df = resolve_fbref_team(session, "Dagenham & Redbridge")
+        assert by_player_df.id == by_caption.id
+        session.rollback()
+
+
 def test_resolve_or_create_links_handle_onto_existing_row_no_duplicate():
     """An unknown-by-id opponent whose name matches an existing row attaches its
     fbref_id to that row (the seam link) rather than creating a duplicate."""
