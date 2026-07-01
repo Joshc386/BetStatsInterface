@@ -25,6 +25,11 @@ COMPETITIONS = [
     # Domestic knockout (club_cup) so it never counts as league form; player
     # data only (football-data.co.uk has no play-off coverage).
     ("Championship Play-offs", "club_cup", None, None, None),
+    # Domestic cups (ADR 0008): player-only, FBref-sourced (fbref_key set;
+    # football-data.co.uk does not cover cups, so fdcouk_key=None). Distinct
+    # competition_id keeps "FA Cup form" and "EFL Cup form" separable.
+    ("FA Cup", "club_cup", None, None, "FA Cup"),
+    ("EFL Cup", "club_cup", None, None, "EFL Cup"),
 ]
 
 

@@ -14,5 +14,15 @@
         "MatchHistory": "E3",
         "season_start": "Aug",
         "season_end": "May"
+    },
+    "ENG-FA Cup": {
+        "FBref": "FA Cup",
+        "season_start": "Aug",
+        "season_end": "May"
+    },
+    "ENG-EFL Cup": {
+        "FBref": "EFL Cup",
+        "season_start": "Aug",
+        "season_end": "May"
     }
 }
