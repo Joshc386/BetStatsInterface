@@ -121,6 +121,9 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # alias the caption so cups.py links the existing row instead of duplicating it
     # (the player-df already spells it 'Milton Keynes Dons' = canonical).
     "MK Dons": "Milton Keynes Dons",  # schedule/caption
+    # EFL Cup 2023-24 draw.
+    "Colchester United": "Colchester",  # player-df (existing canonical)
+    "Northampton Town": "Northampton",  # player-df (existing canonical)
 }
 
 

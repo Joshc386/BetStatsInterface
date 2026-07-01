@@ -212,6 +212,8 @@ def test_fbref_player_df_long_names_resolve_to_existing_canonicals():
         "Cheltenham Town": "Cheltenham",
         "Shrewsbury Town": "Shrewsbury",
         "MK Dons": "Milton Keynes Dons",  # short caption -> long canonical
+        "Colchester United": "Colchester",
+        "Northampton Town": "Northampton",
     }
     with SessionLocal() as session:
         for fbref_name, canonical in cases.items():
