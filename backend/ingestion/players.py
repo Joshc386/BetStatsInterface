@@ -110,6 +110,17 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # so the caption 'Dag & Red' auto-creates it (ADR 0007); alias the player-df
     # full name onto that created spelling so ingest resolves to the same row.
     "Dagenham & Redbridge": "Dag & Red",
+    # More cup opponents surfaced by the FA Cup 2023-24 backfill (older-season draw).
+    "Bolton Wanderers": "Bolton",  # player-df (existing canonical)
+    "Cambridge United": "Cambridge",  # player-df (existing canonical)
+    "Maidstone United": "Maidstone Utd",  # non-league; player-df -> auto-created caption
+    # FA Cup 2025-26 draw.
+    "Cheltenham Town": "Cheltenham",  # player-df (existing canonical)
+    "Shrewsbury Town": "Shrewsbury",  # player-df (existing canonical)
+    # MK Dons: here the SHORT spelling is the caption and the LONG is canonical —
+    # alias the caption so cups.py links the existing row instead of duplicating it
+    # (the player-df already spells it 'Milton Keynes Dons' = canonical).
+    "MK Dons": "Milton Keynes Dons",  # schedule/caption
 }
 
 
