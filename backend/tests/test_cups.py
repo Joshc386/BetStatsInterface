@@ -12,6 +12,7 @@ import pandas as pd
 from sqlalchemy import select, text
 
 from ingestion.cups import (
+    _already_ingested,
     covered_team_ids,
     get_or_create_cup_fixture,
     pair_team_ids,
@@ -19,8 +20,8 @@ from ingestion.cups import (
     select_covered_games,
 )
 from app.db import SessionLocal
-from app.models.facts import Fixture, TeamMatch
-from app.models.reference import Competition, Team
+from app.models.facts import Fixture, PlayerMatch, TeamMatch
+from app.models.reference import Competition, Player, Team
 
 
 def test_covered_team_ids_match_pl_and_championship_league_rows():
@@ -54,6 +55,35 @@ def test_covered_team_ids_excludes_some_lower_league_teams():
             )
         )
         assert any_team_match - covered  # non-empty: some teams are filtered out
+
+
+def test_already_ingested_skips_games_with_player_rows():
+    """Resumability: a covered game whose fixture already has player_match rows is
+    skipped on restart (no re-fetch); an unknown/empty game id is not."""
+    with SessionLocal() as session:
+        comp = session.scalar(select(Competition).where(Competition.name == "FA Cup"))
+        assert _already_ingested(session, "zznogame") is False
+        a = Team(canonical_name="__ZZ Resume Home__")
+        b = Team(canonical_name="__ZZ Resume Away__")
+        session.add_all([a, b])
+        session.flush()
+        when = dt.datetime(2025, 1, 11, tzinfo=dt.timezone.utc)
+        fx = get_or_create_cup_fixture(session, comp, "2425", a, b, when, "zzresume1")
+        # fixture exists but no player rows yet -> not ingested
+        assert _already_ingested(session, "zzresume1") is False
+        p = Player(canonical_name="__ZZ Resume Player__", fbref_id="zzrp01")
+        session.add(p)
+        session.flush()
+        session.add(
+            PlayerMatch(
+                fixture_id=fx.id, competition_id=comp.id, competition_type="club_cup",
+                season="2425", date=when, player_id=p.id, team_id=a.id,
+                opponent_id=b.id, is_home=True, minutes=90,
+            )
+        )
+        session.flush()
+        assert _already_ingested(session, "zzresume1") is True
+        session.rollback()
 
 
 def test_one_cup_fixture_per_fbref_match_id():

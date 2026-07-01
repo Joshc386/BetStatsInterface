@@ -20,12 +20,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models.facts import Fixture, TeamMatch
+from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Team
 from ingestion.names import clean_name, normalise_for_match
 from ingestion.players import (
     _FBREF_CACHE,
-    _pending_fixtures,
     _schedule_date,
     ingest_match,
     match_existing_team,
@@ -176,6 +175,27 @@ def get_or_create_cup_fixture(
     return fixture
 
 
+def _already_ingested(session: Session, game_id: str) -> bool:
+    """True when this cup game's fixture already carries player_match rows.
+
+    Lets a watchdog restart resume: an already-ingested tie is skipped before any
+    network fetch, so restarts cost nothing on the games already done.
+    """
+    fixture_id = session.scalar(
+        select(Fixture.id).where(Fixture.fbref_match_id == game_id)
+    )
+    if fixture_id is None:
+        return False
+    return (
+        session.scalar(
+            select(PlayerMatch.id)
+            .where(PlayerMatch.fixture_id == fixture_id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def backfill_cup_season(
     season: str,
     *,
@@ -220,6 +240,8 @@ def backfill_cup_season(
         skipped: list[str] = []
         for game in games:
             game_id = game["game_id"]
+            if _already_ingested(session, game_id):
+                continue  # resume: skip games already done, no network fetch
             try:
                 df = fb.read_player_match_stats(stat_type="summary", match_id=game_id)
                 html = (_FBREF_CACHE / f"match_{game_id}.html").read_text(
@@ -243,13 +265,10 @@ def backfill_cup_season(
                     log(f"  + created team {home.canonical_name!r} ({home_id})")
                 if a_new:
                     log(f"  + created team {away.canonical_name!r} ({away_id})")
-                get_or_create_cup_fixture(
+                fixture = get_or_create_cup_fixture(
                     session, competition, season, home, away, game["date"], game_id
                 )
                 # ingest immediately while the page df is in hand (resumable)
-                fixture = session.scalar(
-                    select(Fixture).where(Fixture.fbref_match_id == game_id)
-                )
                 n = ingest_match(
                     session, fixture, competition.type, df, parse_player_ids(html)
                 )
