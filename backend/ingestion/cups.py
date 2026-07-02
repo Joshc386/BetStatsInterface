@@ -16,7 +16,8 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -25,10 +26,12 @@ from app.models.reference import Competition, Team
 from ingestion.names import clean_name, normalise_for_match
 from ingestion.players import (
     _FBREF_CACHE,
+    ScorelineError,
     _schedule_date,
     ingest_match,
     match_existing_team,
     parse_player_ids,
+    parse_scoreline,
     parse_team_ids,
 )
 
@@ -292,6 +295,135 @@ def backfill_cup_season(
         }
 
 
+# team_match metric fields this cup path populates. corners + xg are intentionally
+# absent — FBref cup pages carry no corners panel and xG is deferred (both stay NULL,
+# see the cup-corners to-do); everything else is derivable from cached data.
+_CUP_TEAM_METRICS = [
+    "gf", "ga", "shots", "sot", "shots_conceded", "sot_conceded",
+    "fouls", "yellows", "reds",
+]
+
+
+def _int(value) -> int | None:
+    """Coerce a SQL SUM (Decimal / None) to int or None."""
+    return None if value is None else int(value)
+
+
+def _team_stat_totals(session: Session, fixture_id: int) -> dict[int, dict]:
+    """Sum a fixture's player_match rows per team → team-level event counts.
+
+    SUM ignores NULLs, so a source-sparse match (whole match missing shots/fouls
+    at player level) yields NULL totals — correctly left uncovered, not zeroed.
+    """
+    rows = session.execute(
+        select(
+            PlayerMatch.team_id,
+            func.sum(PlayerMatch.shots),
+            func.sum(PlayerMatch.sot),
+            func.sum(PlayerMatch.fouls_committed),
+            func.sum(PlayerMatch.yellows),
+            func.sum(PlayerMatch.reds),
+        )
+        .where(PlayerMatch.fixture_id == fixture_id)
+        .group_by(PlayerMatch.team_id)
+    ).all()
+    return {
+        team_id: {
+            "shots": _int(sh), "sot": _int(sot), "fouls": _int(fls),
+            "yellows": _int(y), "reds": _int(r),
+        }
+        for team_id, sh, sot, fls, y, r in rows
+    }
+
+
+def backfill_cup_team_match(
+    season: str, *, cup_name: str, log=print
+) -> dict:
+    """Build the two team_match rows per cup fixture from cached data — ZERO network.
+
+    gf/ga come from the cached match scorebox (authoritative — includes own-goals a
+    player-goal sum would miss); shots/sot/fouls/yellows/reds by summing the
+    fixture's already-ingested player_match rows; shots/sot_conceded from the
+    opposite side. corners + xg stay NULL (no cup source). Idempotent on
+    (fixture_id, team_id). A fixture with no cached page, no scorebox, or no player
+    rows yet is skipped + logged (ADR 0008 team-data follow-up).
+    """
+    with SessionLocal() as session:
+        competition = session.scalar(
+            select(Competition).where(Competition.name == cup_name)
+        )
+        if competition is None:
+            raise ValueError(f"competition {cup_name!r} not seeded")
+
+        fixtures = list(
+            session.scalars(
+                select(Fixture).where(
+                    Fixture.competition_id == competition.id,
+                    Fixture.season == season,
+                    Fixture.fbref_match_id.is_not(None),
+                )
+            )
+        )
+        built = 0
+        skipped: list[str] = []
+        for fx in fixtures:
+            game_id = fx.fbref_match_id
+            try:
+                html = (_FBREF_CACHE / f"match_{game_id}.html").read_text(
+                    encoding="utf-8"
+                )
+                home_goals, away_goals = parse_scoreline(html)
+            except (FileNotFoundError, ScorelineError) as exc:
+                skipped.append(f"{game_id}: {type(exc).__name__}: {exc}")
+                continue
+
+            totals = _team_stat_totals(session, fx.id)
+            if fx.home_team_id not in totals or fx.away_team_id not in totals:
+                skipped.append(f"{game_id}: no player rows for both sides")
+                continue
+            home, away = totals[fx.home_team_id], totals[fx.away_team_id]
+
+            for team_id, opp_id, is_home, gf, ga, own, opp in (
+                (fx.home_team_id, fx.away_team_id, True, home_goals, away_goals, home, away),
+                (fx.away_team_id, fx.home_team_id, False, away_goals, home_goals, away, home),
+            ):
+                vals = {
+                    "fixture_id": fx.id,
+                    "competition_id": competition.id,
+                    "competition_type": "club_cup",
+                    "season": season,
+                    "date": fx.date,
+                    "team_id": team_id,
+                    "opponent_id": opp_id,
+                    "is_home": is_home,
+                    "gf": gf,
+                    "ga": ga,
+                    "shots": own["shots"],
+                    "sot": own["sot"],
+                    "shots_conceded": opp["shots"],
+                    "sot_conceded": opp["sot"],
+                    "fouls": own["fouls"],
+                    "yellows": own["yellows"],
+                    "reds": own["reds"],
+                }
+                session.execute(
+                    insert(TeamMatch)
+                    .values(**vals)
+                    .on_conflict_do_update(
+                        constraint="uq_team_match",
+                        set_={k: vals[k] for k in (["date"] + _CUP_TEAM_METRICS)},
+                    )
+                )
+            session.commit()
+            built += 1
+            log(f"  [{game_id}] {home_goals}-{away_goals} team rows")
+
+        return {
+            "cup": cup_name, "season": season, "fixtures": len(fixtures),
+            "built": built, "skipped": skipped,
+        }
+
+
 # Operator-facing: cup competitions this backfill can ingest -> soccerdata league.
 LEAGUE_IDS = {
     "FA Cup": "ENG-FA Cup",
@@ -302,18 +434,34 @@ LEAGUE_IDS = {
 if __name__ == "__main__":
     import sys
 
-    season = sys.argv[1] if len(sys.argv) > 1 else "2425"
-    cup = sys.argv[2] if len(sys.argv) > 2 else "FA Cup"
-    limit = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    # Two modes:
+    #   player (default):  python -m ingestion.cups <season> <cup> [limit]   (needs VPN off, watchdog)
+    #   team (zero-network): python -m ingestion.cups team <season> <cup>
+    argv = sys.argv[1:]
+    team_mode = bool(argv) and argv[0] == "team"
+    if team_mode:
+        argv = argv[1:]
+
+    season = argv[0] if len(argv) > 0 else "2425"
+    cup = argv[1] if len(argv) > 1 else "FA Cup"
     if cup not in LEAGUE_IDS:
         raise SystemExit(f"unknown cup {cup!r}; choose from {list(LEAGUE_IDS)}")
-    report = backfill_cup_season(
-        season, cup_name=cup, league=LEAGUE_IDS[cup], limit=limit
-    )
-    print(
-        f"\n{report['cup']} {report['season']}: covered={report['covered_ties']} "
-        f"fixtures={report['fixtures']} created_teams={report['created_teams']} "
-        f"skipped={len(report['skipped'])}"
-    )
+
+    if team_mode:
+        report = backfill_cup_team_match(season, cup_name=cup)
+        print(
+            f"\n{report['cup']} {report['season']}: fixtures={report['fixtures']} "
+            f"team_rows_built={report['built']} skipped={len(report['skipped'])}"
+        )
+    else:
+        limit = int(argv[2]) if len(argv) > 2 else None
+        report = backfill_cup_season(
+            season, cup_name=cup, league=LEAGUE_IDS[cup], limit=limit
+        )
+        print(
+            f"\n{report['cup']} {report['season']}: covered={report['covered_ties']} "
+            f"fixtures={report['fixtures']} created_teams={report['created_teams']} "
+            f"skipped={len(report['skipped'])}"
+        )
     for s in report["skipped"][:20]:
         print("  skip:", s)

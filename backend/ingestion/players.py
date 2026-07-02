@@ -43,6 +43,10 @@ class UnknownTeamError(Exception):
 class PlayerIdError(Exception):
     """A summary-df player name had no id in the parsed HTML map (join gap)."""
 
+
+class ScorelineError(Exception):
+    """A match page's scorebox was absent or its scores were unparseable."""
+
 # FBref display name -> canonical_name (the cleaned football-data.co.uk spelling
 # already in `teams`). Only the names that DIFFER need an entry; everything else
 # resolves by identity. FBref spells teams TWO ways: short names in `read_schedule`
@@ -468,6 +472,37 @@ def parse_player_ids(match_html: str) -> dict[str, str]:
 
 _TEAM_TABLE_ID = re.compile(r"^stats_([0-9a-f]+)_summary$")
 _CAPTION_SUFFIX = " Player Stats Table"
+
+
+def parse_scoreline(match_html: str) -> tuple[int, int]:
+    """Return ``(home_goals, away_goals)`` from a match page's scorebox.
+
+    The two ``score`` blocks in the ``scorebox`` carry the regulation/ET goals in
+    home-then-away document order (a penalty shootout is a separate ``score_pen``
+    block, deliberately ignored — gf/ga is the match score, not the shootout).
+    A double-digit score gets class ``"score double"``, so match the ``score``
+    class *token* (excludes the ``scores`` container and ``score_pen``).
+    Authoritative for goals in a way summed player goals are not: FBref credits no
+    player for an opponent own-goal. Raises ScorelineError if the scorebox is
+    absent or unparseable, so the caller skips + logs one game.
+    """
+    doc = lxml_html.fromstring(match_html)
+    scores = doc.xpath(
+        '//div[@class="scorebox"]'
+        '//div[contains(concat(" ", normalize-space(@class), " "), " score ")]'
+    )
+    if len(scores) < 2:
+        raise ScorelineError(
+            f"expected 2 scorebox scores, found {len(scores)}"
+        )
+    try:
+        return int(scores[0].text_content().strip()), int(
+            scores[1].text_content().strip()
+        )
+    except ValueError as exc:
+        raise ScorelineError(
+            f"non-integer scorebox score: {[s.text_content() for s in scores[:2]]}"
+        ) from exc
 
 
 def parse_team_ids(match_html: str) -> dict[str, str]:

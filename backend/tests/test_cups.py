@@ -11,8 +11,11 @@ import datetime as dt
 import pandas as pd
 from sqlalchemy import select, text
 
+import pytest
+
 from ingestion.cups import (
     _already_ingested,
+    _team_stat_totals,
     covered_team_ids,
     get_or_create_cup_fixture,
     pair_team_ids,
@@ -107,6 +110,105 @@ def test_one_cup_fixture_per_fbref_match_id():
         ).all()
         assert not violations, (
             f"{len(violations)} cup match ids mapped to >1 fixture: "
+            f"{[tuple(v) for v in violations[:10]]}"
+        )
+
+
+def test_parse_scoreline_reads_home_then_away_ignoring_shootout():
+    """gf/ga = the two scorebox `.score` blocks in document order; a penalty
+    shootout (`.score_pen`) is deliberately not counted as goals."""
+    from ingestion.players import parse_scoreline
+
+    html = (
+        '<div class="scorebox">'
+        '<div><div class="scores"><div class="score">3</div>'
+        '<div class="score_pen">4</div></div></div>'
+        '<div><div class="scores"><div class="score">1</div></div></div>'
+        "</div>"
+    )
+    assert parse_scoreline(html) == (3, 1)
+
+
+def test_parse_scoreline_handles_double_digit_score():
+    """A 10+ score gets class 'score double'; the token match must still read it
+    (regression: FA Cup 2025-26 Man City 10-1 Exeter was dropped by an exact
+    class='score' match). The 'scores' container is not double-counted."""
+    from ingestion.players import parse_scoreline
+
+    html = (
+        '<div class="scorebox">'
+        '<div><div class="scores"><div class="score double">10</div></div></div>'
+        '<div><div class="scores"><div class="score">1</div></div></div>'
+        "</div>"
+    )
+    assert parse_scoreline(html) == (10, 1)
+
+
+def test_parse_scoreline_raises_without_scorebox():
+    from ingestion.players import ScorelineError, parse_scoreline
+
+    with pytest.raises(ScorelineError):
+        parse_scoreline("<div>no scorebox here</div>")
+
+
+def test_team_stat_totals_sums_rows_and_leaves_sparse_metrics_null():
+    """Team totals = SUM of the fixture's player rows; a side whose players all
+    carry NULL shots (source-sparse match) yields NULL, not 0 — uncovered, not
+    zeroed. Rolled back."""
+    import datetime as dt
+
+    with SessionLocal() as session:
+        comp = session.scalar(select(Competition).where(Competition.name == "FA Cup"))
+        a = Team(canonical_name="__ZZ TM Home__")
+        b = Team(canonical_name="__ZZ TM Away__")
+        session.add_all([a, b])
+        session.flush()
+        when = dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc)
+        fx = get_or_create_cup_fixture(session, comp, "2425", a, b, when, "zztmtot1")
+        p1 = Player(canonical_name="__ZZ TM P1__", fbref_id="zztm_p1")
+        p2 = Player(canonical_name="__ZZ TM P2__", fbref_id="zztm_p2")
+        session.add_all([p1, p2])
+        session.flush()
+        common = dict(
+            fixture_id=fx.id, competition_id=comp.id, competition_type="club_cup",
+            season="2425", date=when, minutes=90,
+        )
+        session.add_all([
+            PlayerMatch(**common, player_id=p1.id, team_id=a.id, opponent_id=b.id,
+                        is_home=True, shots=3, sot=1, fouls_committed=2, yellows=1, reds=0),
+            # away side: shots/sot/fouls NULL (sparse), cards present
+            PlayerMatch(**common, player_id=p2.id, team_id=b.id, opponent_id=a.id,
+                        is_home=False, shots=None, sot=None, fouls_committed=None,
+                        yellows=0, reds=0),
+        ])
+        session.flush()
+
+        totals = _team_stat_totals(session, fx.id)
+        assert totals[a.id] == {"shots": 3, "sot": 1, "fouls": 2, "yellows": 1, "reds": 0}
+        assert totals[b.id]["shots"] is None and totals[b.id]["sot"] is None
+        assert totals[b.id]["fouls"] is None and totals[b.id]["yellows"] == 0
+        session.rollback()
+
+
+def test_cup_fixture_team_match_rows_are_zero_or_two_never_partial():
+    """Standing guard: a cup fixture carries either 0 team_match rows (team data
+    not built for its competition) or exactly 2 (both sides) — never 1 or 3+, which
+    would mean a half-ingested or contaminated fixture. Read-only."""
+    with SessionLocal() as session:
+        violations = session.execute(
+            text(
+                """
+                SELECT f.id, f.fbref_match_id, COUNT(tm.id) AS n
+                FROM fixtures f
+                JOIN competitions c ON c.id = f.competition_id AND c.type = 'club_cup'
+                LEFT JOIN team_match tm ON tm.fixture_id = f.id
+                GROUP BY f.id, f.fbref_match_id
+                HAVING COUNT(tm.id) NOT IN (0, 2)
+                """
+            )
+        ).all()
+        assert not violations, (
+            f"{len(violations)} cup fixtures with a partial team_match set: "
             f"{[tuple(v) for v in violations[:10]]}"
         )
 

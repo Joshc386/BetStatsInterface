@@ -20,7 +20,7 @@ dedicated entrypoint that creates fixtures from the FBref cup schedule.**
   and ships the higher-value half (rotation/cup-prop research). Cup *team* rows
   (from FBref scorelines/match team-stats) are a deferred follow-up — the same deferral
   ADR 0004 made for the play-offs. While team data is absent, Head-to-Head stays
-  league-only as today.
+  league-only as today. **(Follow-up now landed — see "Update" below.)**
 - **Scope = ties with at least one PL or Championship club, season-aware.** "Covered"
   is decided per season from `team_match` (the club has league rows in PL/Championship
   that season), so a club relegated out of the top two does not drag its cup ties in for
@@ -69,3 +69,26 @@ dedicated entrypoint that creates fixtures from the FBref cup schedule.**
   is exactly where contamination sneaks in, so it is guarded explicitly.
 - The pattern generalises to the other domestic knockouts and, with the `LEAGUE_DICT`
   precedent, to European/international competitions later.
+
+## Update — cup team data landed (2026-07-02)
+
+The deferred `team_match` follow-up is now built (`cups.backfill_cup_team_match`,
+`cups team <season> <cup>` CLI) for all six cup-seasons (804 rows = 2 × 402 fixtures).
+**Zero-network** — it reuses data already on hand:
+
+- `gf`/`ga` from the cached match **scorebox** (`players.parse_scoreline`) — authoritative
+  where a summed player-goal count is not (FBref credits no player for an opponent
+  own-goal). A 10+ score carries class `"score double"`, matched via the `score` class
+  token (regression: Man City 10-1 Exeter was first dropped by an exact `class="score"`).
+- `shots`/`sot`/`fouls`/`yellows`/`reds` by summing the fixture's `player_match` rows;
+  `shots_conceded`/`sot_conceded` from the opposite side.
+- **Coverage caveats (honestly surfaced, not hidden):** `corners` is **NULL for all cup
+  rows** — FBref cup pages omit the team-stats-extra panel and fd.co.uk does not cover
+  cups (tracked as a top backlog item; likely FotMob later). `xg` stays NULL as
+  everywhere. `shots`/`sot`/`fouls` are NULL for the ~8% of cup matches where FBref's
+  source itself is sparse (goals + cards are always present).
+
+Because cup `team_match` is *derived* from the same FBref data as the player rows, its
+shot/foul totals cannot cross-validate that player data (equal by construction) — but the
+scorebox `gf`/`ga` is independent, so the standing `sum(player goals) ≤ gf` invariant now
+meaningfully spans cup rows. Head-to-Head is no longer league-only for covered cup clubs.
