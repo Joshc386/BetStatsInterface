@@ -117,7 +117,7 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.backfill_team_fbref_id   # populate teams.fbref_id from cached FBref match pages
 
 # cup team_match (ADR 0008 follow-up — zero-network, idempotent; run AFTER the cup player backfill)
-.venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + player-row sums (corners stay NULL)
+.venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + team_stats_extra corners + player-row sums; also accepts "Championship Play-offs"
 
 # ingestion  (TODO — Phase 5)
 # nightly incremental / roster refresh

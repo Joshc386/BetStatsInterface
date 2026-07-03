@@ -30,6 +30,7 @@ from ingestion.players import (
     _schedule_date,
     ingest_match,
     match_existing_team,
+    parse_corners,
     parse_player_ids,
     parse_scoreline,
     parse_team_ids,
@@ -295,12 +296,14 @@ def backfill_cup_season(
         }
 
 
-# team_match metric fields this cup path populates. corners + xg are intentionally
-# absent — FBref cup pages carry no corners panel and xG is deferred (both stay NULL,
-# see the cup-corners to-do); everything else is derivable from cached data.
+# team_match metric fields this cup path populates. xg is intentionally absent
+# (deferred, stays NULL everywhere). corners comes from the page's
+# team_stats_extra panel and is NULL only where that panel is absent upstream
+# (a minority of FA Cup third-round pages); everything else is derivable from
+# cached data.
 _CUP_TEAM_METRICS = [
     "gf", "ga", "shots", "sot", "shots_conceded", "sot_conceded",
-    "fouls", "yellows", "reds",
+    "fouls", "yellows", "reds", "corners",
 ]
 
 
@@ -342,11 +345,14 @@ def backfill_cup_team_match(
     """Build the two team_match rows per cup fixture from cached data — ZERO network.
 
     gf/ga come from the cached match scorebox (authoritative — includes own-goals a
-    player-goal sum would miss); shots/sot/fouls/yellows/reds by summing the
-    fixture's already-ingested player_match rows; shots/sot_conceded from the
-    opposite side. corners + xg stay NULL (no cup source). Idempotent on
-    (fixture_id, team_id). A fixture with no cached page, no scorebox, or no player
-    rows yet is skipped + logged (ADR 0008 team-data follow-up).
+    player-goal sum would miss); corners from the page's team_stats_extra panel
+    (NULL where the panel is absent upstream — whole-match figures, ET included);
+    shots/sot/fouls/yellows/reds by summing the fixture's already-ingested
+    player_match rows; shots/sot_conceded from the opposite side. xg stays NULL
+    (deferred). Idempotent on (fixture_id, team_id). A fixture with no cached
+    page, no scorebox, or no player rows yet is skipped + logged (ADR 0008
+    team-data follow-up). Works for any seeded club_cup competition whose
+    fixtures carry an fbref_match_id (FA Cup, EFL Cup, Championship Play-offs).
     """
     with SessionLocal() as session:
         competition = session.scalar(
@@ -376,6 +382,10 @@ def backfill_cup_team_match(
             except (FileNotFoundError, ScorelineError) as exc:
                 skipped.append(f"{game_id}: {type(exc).__name__}: {exc}")
                 continue
+            # None when the page lacks the team_stats_extra panel — corners
+            # stays NULL but the team rows are still built.
+            corners = parse_corners(html)
+            home_corners, away_corners = corners if corners else (None, None)
 
             totals = _team_stat_totals(session, fx.id)
             if fx.home_team_id not in totals or fx.away_team_id not in totals:
@@ -383,9 +393,9 @@ def backfill_cup_team_match(
                 continue
             home, away = totals[fx.home_team_id], totals[fx.away_team_id]
 
-            for team_id, opp_id, is_home, gf, ga, own, opp in (
-                (fx.home_team_id, fx.away_team_id, True, home_goals, away_goals, home, away),
-                (fx.away_team_id, fx.home_team_id, False, away_goals, home_goals, away, home),
+            for team_id, opp_id, is_home, gf, ga, crn, own, opp in (
+                (fx.home_team_id, fx.away_team_id, True, home_goals, away_goals, home_corners, home, away),
+                (fx.away_team_id, fx.home_team_id, False, away_goals, home_goals, away_corners, away, home),
             ):
                 vals = {
                     "fixture_id": fx.id,
@@ -405,6 +415,7 @@ def backfill_cup_team_match(
                     "fouls": own["fouls"],
                     "yellows": own["yellows"],
                     "reds": own["reds"],
+                    "corners": crn,
                 }
                 session.execute(
                     insert(TeamMatch)
@@ -444,7 +455,10 @@ if __name__ == "__main__":
 
     season = argv[0] if len(argv) > 0 else "2425"
     cup = argv[1] if len(argv) > 1 else "FA Cup"
-    if cup not in LEAGUE_IDS:
+    # Only the live player fetch needs a soccerdata league mapping; team mode is
+    # zero-network and works for any seeded club_cup competition with cached
+    # pages (incl. "Championship Play-offs").
+    if not team_mode and cup not in LEAGUE_IDS:
         raise SystemExit(f"unknown cup {cup!r}; choose from {list(LEAGUE_IDS)}")
 
     if team_mode:

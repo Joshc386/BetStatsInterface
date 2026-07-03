@@ -82,13 +82,50 @@ The deferred `team_match` follow-up is now built (`cups.backfill_cup_team_match`
   token (regression: Man City 10-1 Exeter was first dropped by an exact `class="score"`).
 - `shots`/`sot`/`fouls`/`yellows`/`reds` by summing the fixture's `player_match` rows;
   `shots_conceded`/`sot_conceded` from the opposite side.
-- **Coverage caveats (honestly surfaced, not hidden):** `corners` is **NULL for all cup
-  rows** — FBref cup pages omit the team-stats-extra panel and fd.co.uk does not cover
-  cups (tracked as a top backlog item; likely FotMob later). `xg` stays NULL as
-  everywhere. `shots`/`sot`/`fouls` are NULL for the ~8% of cup matches where FBref's
-  source itself is sparse (goals + cards are always present).
+- **Coverage caveats (honestly surfaced, not hidden):** `xg` stays NULL as everywhere.
+  `shots`/`sot`/`fouls` are NULL for the ~8% of cup matches where FBref's source itself
+  is sparse (goals + cards are always present). `corners` was initially left NULL on the
+  belief that FBref cup pages omit the team-stats-extra panel — **that belief was wrong;
+  see the corners update below.**
 
 Because cup `team_match` is *derived* from the same FBref data as the player rows, its
 shot/foul totals cannot cross-validate that player data (equal by construction) — but the
 scorebox `gf`/`ga` is independent, so the standing `sum(player goals) ≤ gf` invariant now
 meaningfully spans cup rows. Head-to-Head is no longer league-only for covered cup clubs.
+
+## Update — cup corners + play-off team rows (2026-07-03)
+
+The corners gap is closed, **zero-network, from the same cached pages**. An offline scan
+falsified the premise above: **368 of 402 cached cup match pages carry the
+`team_stats_extra` panel with parseable Corners values.** The 34 without it are all FA
+Cup third-round ties (30 of them the 2024-25 R3 weekend; pages fetched mid-2026, long
+after the matches, so the panel is genuinely absent upstream, not stale-cache).
+
+- **Source: `parse_corners` over the cached page's `team_stats_extra` panel**, wired into
+  `backfill_cup_team_match` (`corners` joined `_CUP_TEAM_METRICS`). The 34 panel-absent
+  fixtures stay NULL — honest sparsity, same as shots/fouls. **FotMob was rejected**: the
+  earlier "likely FotMob later" note predated ADR 0002's finding that soccerdata 1.9.0
+  removed the FotMob reader; a hand-rolled unofficial-API client for 34 fixtures fails
+  the boring-path test. Understat (the surviving xG path) carries no corners.
+- **Whole-match figures — extra time included.** FBref publishes no 90-minute split, and
+  every other cup metric (scorebox `gf`, player-row sums over 120') already includes ET.
+  Recorded in CONTEXT.md under **Metric**: a Cups-scope window mixes game lengths, and
+  90-minute-quoted thresholds (corner lines) should be read accordingly.
+- **Parser validated cross-source before trusting cup values:** parsed FBref corners
+  diffed against the *independent* fd.co.uk corners on all 2,795 comparable league
+  fixtures with cached pages → **95.7 % exact agreement**; 112 of the 120 diffs are
+  one-side ±1 (routine inter-provider counting variance); the 8 structural diffs were
+  audited individually — every fixture link verified (page team ids == fixture teams),
+  every FBref page internally coherent (corners track crosses/fouls), and the largest
+  (Arsenal 13–3 Burnley, PL 2324) confirmed by ESPN. Where they disagree structurally,
+  **fd.co.uk is the wrong side** (incl. one home/away swap and one crossed final-day
+  pair in its own data) — tracked as a separate league-data correction task.
+- **Championship Play-offs team rows built** by the same run: the play-offs were the one
+  remaining `club_cup` competition with no `team_match` rows (the ADR 0004 deferral).
+  All 15 fixtures had cached pages with the panel → 30 rows, corners included; the CLI's
+  `LEAGUE_IDS` gate now applies to player (live-fetch) mode only.
+
+End state: **834 club_cup team rows, 766 with corners**; the 68 NULLs are exactly the
+34 FA Cup R3 fixtures × 2. Unlike shots/fouls, corners is NOT derivable from player
+rows, so FBref-vs-fd.co.uk corner agreement is a genuine cross-source check — the
+validation above doubles as evidence for the whole cup team-data path.

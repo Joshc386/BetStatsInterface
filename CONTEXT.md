@@ -21,7 +21,7 @@ One player's perspective on a **Fixture** — i.e. an **Appearance** (minutes > 
 ### Stats & summaries
 
 **Metric**:
-A raw, measurable per-game quantity recorded on a fact row — e.g. shots, shots on target, tackles, fouls won, cards, minutes. This is what is *stored*.
+A raw, measurable per-game quantity recorded on a fact row — e.g. shots, shots on target, tackles, fouls won, cards, minutes. This is what is *stored*. A Metric covers the game **as played**: a cup tie that went to extra time contributes whole-match (120-minute) figures — FBref reports no 90-minute split — while a league game is 90 minutes by nature. A Cups-scope **Rolling Window** therefore mixes game lengths; thresholds conventionally quoted for 90 minutes (e.g. corners lines) should be read with that in mind.
 _Avoid_: stat (informal), market.
 
 **Summary Metric**:

@@ -151,6 +151,72 @@ def test_parse_scoreline_raises_without_scorebox():
         parse_scoreline("<div>no scorebox here</div>")
 
 
+# Modelled on the real team_stats_extra markup: groups of home/label/away cell
+# triplets, each group headed by three .th cells (team names + blank).
+_EXTRA_PANEL = (
+    '<div id="team_stats_extra">'
+    "<div>"
+    '<div class="th">Manchester Utd</div><div class="th"> </div><div class="th">Fulham</div>'
+    "<div>12</div><div>Fouls</div><div>10</div>"
+    "<div>7</div><div>Corners</div><div>8</div>"
+    "<div>18</div><div>Crosses</div><div>21</div>"
+    "</div>"
+    "<div>"
+    '<div class="th">Manchester Utd</div><div class="th"> </div><div class="th">Fulham</div>'
+    "<div>17</div><div>Interceptions</div><div>10</div>"
+    "</div>"
+    "</div>"
+)
+
+
+def test_parse_corners_reads_home_then_away():
+    """Corners = the home/Corners/away triplet in the team_stats_extra panel;
+    the .th header row and the other stat rows must not shift the triplets."""
+    from ingestion.players import parse_corners
+
+    assert parse_corners(_EXTRA_PANEL) == (7, 8)
+
+
+def test_parse_corners_none_without_panel():
+    """Some cup pages (FA Cup third-round ties) genuinely lack the panel —
+    corners is None (honest NULL), never an error that would skip the fixture's
+    team rows."""
+    from ingestion.players import parse_corners
+
+    assert parse_corners('<div class="scorebox">no extra panel</div>') is None
+
+
+def test_parse_corners_none_when_panel_has_no_corners_row():
+    from ingestion.players import parse_corners
+
+    html = (
+        '<div id="team_stats_extra"><div>'
+        '<div class="th">A</div><div class="th"> </div><div class="th">B</div>'
+        "<div>12</div><div>Fouls</div><div>10</div>"
+        "</div></div>"
+    )
+    assert parse_corners(html) is None
+
+
+@pytest.mark.parametrize(
+    "match_id,expected",
+    [
+        ("cc5b4244", (7, 8)),  # PL 2425: Manchester Utd 1-0 Fulham
+        ("bee4cf99", (2, 6)),  # EFL Cup 2324: Cheltenham vs Birmingham City
+    ],
+)
+def test_parse_corners_on_cached_pages(match_id, expected):
+    """Real cached pages, league and cup, parse to their known corner counts."""
+    from pathlib import Path
+
+    from ingestion.players import parse_corners
+
+    page = Path.home() / "soccerdata" / "data" / "FBref" / f"match_{match_id}.html"
+    if not page.exists():
+        pytest.skip(f"cached FBref page not present: {page}")
+    assert parse_corners(page.read_text(encoding="utf-8")) == expected
+
+
 def test_team_stat_totals_sums_rows_and_leaves_sparse_metrics_null():
     """Team totals = SUM of the fixture's player rows; a side whose players all
     carry NULL shots (source-sparse match) yields NULL, not 0 — uncovered, not

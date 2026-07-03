@@ -505,6 +505,35 @@ def parse_scoreline(match_html: str) -> tuple[int, int]:
         ) from exc
 
 
+def parse_corners(match_html: str) -> tuple[int, int] | None:
+    """Return ``(home_corners, away_corners)`` from the ``team_stats_extra`` panel.
+
+    The panel lists extra team stats as ``home / label / away`` sibling-div
+    triplets; corners is the triplet labelled ``Corners``. Whole-match figures —
+    a cup tie that went to extra time includes it (no 90-minute split exists;
+    see CONTEXT.md "Metric"). Returns None when the panel or the Corners row is
+    absent (some cup pages genuinely lack it — an honest NULL, not an error:
+    unlike the scorebox, missing corners must not skip the fixture's team rows).
+    """
+    doc = lxml_html.fromstring(match_html)
+    labels = doc.xpath(
+        '//div[@id="team_stats_extra"]//div[normalize-space(text())="Corners"]'
+    )
+    if not labels:
+        return None
+    home = labels[0].xpath("preceding-sibling::div[1]")
+    away = labels[0].xpath("following-sibling::div[1]")
+    if not home or not away:
+        return None
+    try:
+        return (
+            int(home[0].text_content().strip()),
+            int(away[0].text_content().strip()),
+        )
+    except ValueError:
+        return None
+
+
 def parse_team_ids(match_html: str) -> dict[str, str]:
     """Map ``team display name -> FBref team id`` for both squads in a match page.
 
