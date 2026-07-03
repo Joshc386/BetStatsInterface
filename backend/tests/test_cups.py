@@ -22,6 +22,7 @@ from ingestion.cups import (
     resolve_or_create_fbref_team,
     select_covered_games,
 )
+from ingestion.players import UnknownTeamError
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Team
@@ -299,6 +300,20 @@ def test_resolve_or_create_makes_a_new_team_for_unknown_opponent():
         assert created is True
         assert got.fbref_id == "zzcup999"
         assert got.canonical_name == "__ZZ Non-League Wanderers__"
+        session.rollback()
+
+
+def test_resolve_or_create_refuses_likely_duplicate_of_existing_club():
+    """Regression: 14 in-universe clubs were silently duplicated because their
+    FBref full name ("Bradford City") didn't alias to the fd.co.uk canonical
+    ("Bradford"). A shared first word must now fail loud, not create a row."""
+    with SessionLocal() as session:
+        session.add(Team(canonical_name="__ZZGuardtown", fdcouk_name="__ZZGuardtown"))
+        session.flush()
+        with pytest.raises(UnknownTeamError, match="refusing to auto-create"):
+            resolve_or_create_fbref_team(
+                session, "__ZZGuardtown Rovers", fbref_id="zzcup998"
+            )
         session.rollback()
 
 

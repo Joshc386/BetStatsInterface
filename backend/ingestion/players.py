@@ -128,6 +128,26 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # EFL Cup 2023-24 draw.
     "Colchester United": "Colchester",  # player-df (existing canonical)
     "Northampton Town": "Northampton",  # player-df (existing canonical)
+    # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
+    # aliasing (auto-create was meant for non-league only) — found and merged
+    # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate
+    # rows' names; `resolve_or_create_fbref_team` now fails loud on a likely
+    # duplicate instead of creating one.
+    "Bradford City": "Bradford",
+    "Bristol Rovers": "Bristol Rvs",
+    "Burton Albion": "Burton",
+    "Carlisle United": "Carlisle",
+    "Crewe Alexandra": "Crewe",
+    "Exeter City": "Exeter",
+    "Grimsby Town": "Grimsby",
+    "Harrogate Town": "Harrogate",
+    "Lincoln City": "Lincoln",
+    "Mansfield Town": "Mansfield",
+    "Salford City": "Salford",  # FC-fold variant of the observed spelling
+    "Salford City FC": "Salford",
+    "Sutton United": "Sutton",
+    "Tranmere Rovers": "Tranmere",
+    "Wigan Athletic": "Wigan",
 }
 
 

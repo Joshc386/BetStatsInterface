@@ -4,8 +4,11 @@ Cups have no football-data.co.uk fixtures to match against, so unlike the league
 path this *creates* fixtures from the FBref cup schedule, scoped to ties with at
 least one covered (Premier League / Championship) club that season. Unknown
 opponents (random-draw lower-/non-league clubs) are auto-created and logged, per
-ADR 0007 — never fail-loud, which would silently drop a tracked club's real tie.
-Both squads come along via the competition-agnostic ``ingest_match``.
+ADR 0007 — EXCEPT when the name looks like an existing club under a different
+spelling, which fails loud instead (14 in-universe clubs were silently duplicated
+this way before 2026-07-03; a dropped tie is recoverable via alias + re-run, a
+duplicate row silently splits a club's history). Both squads come along via the
+competition-agnostic ``ingest_match``.
 
 Live cup fetches require the VPN OFF and ride the watchdog supervisor (one-shot
 fetches hang on Cloudflare). See memory: cups-internationals-sourcing.
@@ -27,6 +30,7 @@ from ingestion.names import clean_name, normalise_for_match
 from ingestion.players import (
     _FBREF_CACHE,
     ScorelineError,
+    UnknownTeamError,
     _schedule_date,
     ingest_match,
     match_existing_team,
@@ -60,6 +64,12 @@ def covered_team_ids(session: Session, season: str) -> set[int]:
     )
 
 
+# Names the cup path may auto-create even though an existing team shares their
+# first word — i.e. confirmed genuinely-distinct clubs (a non-league "Oxford City"
+# vs the league "Oxford"). Empty until such a club actually appears in a draw.
+CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset()
+
+
 def resolve_or_create_fbref_team(
     session: Session, fbref_name: str, fbref_id: str
 ) -> tuple[Team, bool]:
@@ -69,6 +79,9 @@ def resolve_or_create_fbref_team(
     name match the fbref_id is attached (the seam link) so no duplicate is made.
     Only when nothing matches is a new row created (auto-create + log, ADR 0008) —
     this is the one place cups diverge from the league path's fail-loud rule.
+    Guard: creation is refused when an existing team shares the name's first word,
+    the signature of an in-universe club under a different FBref spelling
+    ("Bradford City" vs canonical "Bradford") — that needs an alias, not a new row.
     Returns ``(team, created)``.
     """
     by_id = session.scalar(select(Team).where(Team.fbref_id == fbref_id))
@@ -81,7 +94,27 @@ def resolve_or_create_fbref_team(
             existing.fbref_id = fbref_id  # attach the seam handle
         return existing, False
 
-    team = Team(canonical_name=clean_name(fbref_name), fbref_id=fbref_id)
+    name = clean_name(fbref_name)
+    if name not in CUP_CREATE_ALLOWLIST:
+        first = name.split()[0].casefold()
+        suspects = sorted(
+            t.canonical_name
+            for t in session.scalars(select(Team))
+            if any(
+                n.split()[0].casefold() == first
+                for n in (t.canonical_name, t.fdcouk_name)
+                if n
+            )
+        )
+        if suspects:
+            raise UnknownTeamError(
+                f"refusing to auto-create cup team {name!r}: existing team(s) "
+                f"{suspects} share its first word and may be the same club. Same "
+                "club -> add a FBREF_TEAM_ALIASES entry; genuinely distinct -> "
+                "add it to CUP_CREATE_ALLOWLIST."
+            )
+
+    team = Team(canonical_name=name, fbref_id=fbref_id)
     session.add(team)
     session.flush()
     return team, True
