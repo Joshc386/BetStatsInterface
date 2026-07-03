@@ -77,13 +77,14 @@ def test_h2h_block_is_both_sides_of_the_last_n_meetings():
         home, away = _a_pair_with_meetings(s)
         res = fixture_comparison(s, home_id=home, away_id=away, n=5)
 
+        # H2H spans every team-level scope (league + domestic cups) — the
+        # oracle deliberately has no competition_type filter.
         meeting_ids = [
             fid for (fid,) in s.execute(
                 select(TeamMatch.fixture_id)
                 .where(
                     TeamMatch.team_id == home,
                     TeamMatch.opponent_id == away,
-                    TeamMatch.competition_type == "club_league",
                 )
                 .order_by(TeamMatch.date.desc())
                 .limit(5)
@@ -134,6 +135,68 @@ def test_zero_meetings_still_returns_both_team_blocks():
         assert res["h2h"] == []          # no meetings — degrade gracefully
         assert len(res["home"]) > 0      # ...but each side's own form still renders
         assert len(res["away"]) > 0
+    finally:
+        s.close()
+
+
+def test_h2h_includes_cup_meetings():
+    """A pair that met in a domestic cup shows that tie in H2H (meetings span
+    all team-level scopes; each row carries its competition label)."""
+    s = SessionLocal()
+    try:
+        cup_row = s.execute(
+            select(TeamMatch.team_id, TeamMatch.opponent_id, TeamMatch.fixture_id)
+            .where(TeamMatch.competition_type == "club_cup")
+            .limit(1)
+        ).one()
+        home, away, cup_fixture = cup_row
+        res = fixture_comparison(s, home_id=home, away_id=away, n=50)
+        got = {r.fixture_id for r in res["h2h"]}
+        assert cup_fixture in got
+        comps = {r.fixture_id: r.competition for r in res["h2h"]}
+        assert comps[cup_fixture] in ("FA Cup", "EFL Cup", "Championship Play-offs")
+    finally:
+        s.close()
+
+
+def test_upcoming_fixtures_window_and_status():
+    """Scheduled fixtures inside the window appear (with team names); fixtures
+    beyond the window don't. Rolled back."""
+    import datetime as dt
+
+    from app.fixtures import upcoming_fixtures
+    from app.models.facts import Fixture
+    from app.models.reference import Competition, Team
+
+    s = SessionLocal()
+    try:
+        comp = s.scalars(
+            select(Competition).where(Competition.name == "Premier League")
+        ).one()
+        t1, t2 = s.scalars(select(Team).limit(2)).all()
+        now = dt.datetime.now(dt.timezone.utc)
+        near = Fixture(
+            competition_id=comp.id, season="9899", status="scheduled",
+            date=now + dt.timedelta(days=2),
+            home_team_id=t1.id, away_team_id=t2.id,
+        )
+        far = Fixture(
+            competition_id=comp.id, season="9899", status="scheduled",
+            date=now + dt.timedelta(days=40),
+            home_team_id=t2.id, away_team_id=t1.id,
+        )
+        s.add_all([near, far])
+        s.flush()
+
+        rows = upcoming_fixtures(s, days=7)
+        by_id = {r.fixture_id: r for r in rows}
+        assert near.id in by_id and far.id not in by_id
+        got = by_id[near.id]
+        assert got.home_name == t1.canonical_name
+        assert got.away_name == t2.canonical_name
+        assert got.competition == "Premier League"
+        assert all(r.date >= now for r in rows)
+        s.rollback()
     finally:
         s.close()
 

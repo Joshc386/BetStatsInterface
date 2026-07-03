@@ -9,10 +9,12 @@ the single-metric Entity view.
 
 from __future__ import annotations
 
+import datetime as dt
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
-from app.models.facts import TeamMatch
+from app.models.facts import Fixture, TeamMatch
 from app.models.reference import Competition, Team
 
 # Every column the client needs to render a fixture row and aggregate any metric.
@@ -71,7 +73,10 @@ def _team_rows(session: Session, team_id: int, n: int):
 
 
 def _h2h_rows(session: Session, home_id: int, away_id: int, n: int):
-    """Both sides of the last-n league meetings between the two teams.
+    """Both sides of the last-n meetings between the two teams, every
+    team-level scope on record — league plus domestic-cup ties (H2H is a
+    meetings list, not a form window; scope purity binds Rolling Windows only,
+    see CONTEXT.md). Each row carries its competition label for filtering.
 
     Both perspectives are returned because the opponent's corners/fouls/cards
     are not derivable from a single team's row (only shots/sot have a `conceded`
@@ -82,7 +87,6 @@ def _h2h_rows(session: Session, home_id: int, away_id: int, n: int):
         .where(
             TeamMatch.team_id == home_id,
             TeamMatch.opponent_id == away_id,
-            TeamMatch.competition_type == "club_league",
         )
         .order_by(TeamMatch.date.desc())
         .limit(n)
@@ -93,6 +97,38 @@ def _h2h_rows(session: Session, home_id: int, away_id: int, n: int):
         _rows_query()
         .where(TeamMatch.fixture_id.in_(meeting_ids))
         .order_by(TeamMatch.date.desc())
+    )
+    return list(session.execute(q).all())
+
+
+def upcoming_fixtures(session: Session, *, days: int = 14):
+    """Scheduled fixtures from now through the next `days` days, soonest first.
+
+    Display-only rows for the landing-page slate (ADR 0009). Postponed games
+    vanish from the feed but their stale rows are future-dated no longer, so
+    the `date >= now` bound ages them out naturally.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    home, away = aliased(Team), aliased(Team)
+    q = (
+        select(
+            Fixture.id.label("fixture_id"),
+            Fixture.date,
+            Competition.name.label("competition"),
+            Fixture.home_team_id.label("home_id"),
+            home.canonical_name.label("home_name"),
+            Fixture.away_team_id.label("away_id"),
+            away.canonical_name.label("away_name"),
+        )
+        .join(Competition, Competition.id == Fixture.competition_id)
+        .join(home, home.id == Fixture.home_team_id)
+        .join(away, away.id == Fixture.away_team_id)
+        .where(
+            Fixture.status == "scheduled",
+            Fixture.date >= now,
+            Fixture.date <= now + dt.timedelta(days=days),
+        )
+        .order_by(Fixture.date, Competition.name)
     )
     return list(session.execute(q).all())
 

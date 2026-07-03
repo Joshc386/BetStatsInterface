@@ -98,7 +98,19 @@ export interface FixtureComparison {
   away_name: string
   home: FixtureRow[]
   away: FixtureRow[]
-  h2h: FixtureRow[] // both sides of each meeting
+  h2h: FixtureRow[] // both sides of each meeting — league + domestic cups
+}
+
+// One scheduled fixture from the upcoming feed (ESPN, ADR 0009) —
+// display-only; links into the Fixture view by team pair.
+export interface UpcomingFixture {
+  fixture_id: number
+  date: string
+  competition: string
+  home_id: number
+  home_name: string
+  away_id: number
+  away_name: string
 }
 
 // Squad-form panel — the club's Recent squad + each member's raw appearance rows
@@ -187,6 +199,8 @@ export const api = {
     ),
   fixtureDetail: (fixtureId: number) =>
     getJSON<FixtureRow[]>(`/fixtures/${fixtureId}`),
+  fixturesUpcoming: (days = 14) =>
+    getJSON<UpcomingFixture[]>(`/fixtures/upcoming?days=${days}`),
   squadForm: (teamId: number, cap = 30) =>
     getJSON<SquadForm>(`/teams/${teamId}/squad-form?cap=${cap}`),
 }

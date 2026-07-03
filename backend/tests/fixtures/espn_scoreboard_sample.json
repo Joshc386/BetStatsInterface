@@ -1,0 +1,65 @@
+{
+  "leagues": [{"name": "English Premier League", "slug": "eng.1"}],
+  "events": [
+    {
+      "id": "740001",
+      "date": "2026-08-21T19:00Z",
+      "name": "Arsenal at Coventry City",
+      "status": {"type": {"name": "STATUS_SCHEDULED"}},
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {"id": "359", "displayName": "Arsenal", "shortDisplayName": "Arsenal"}
+            },
+            {
+              "homeAway": "away",
+              "team": {"id": "388", "displayName": "Coventry City", "shortDisplayName": "Coventry"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "740002",
+      "date": "2026-08-22T11:30Z",
+      "name": "Manchester United at Hull City",
+      "status": {"type": {"name": "STATUS_SCHEDULED"}},
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {"id": "306", "displayName": "Hull City", "shortDisplayName": "Hull City"}
+            },
+            {
+              "homeAway": "away",
+              "team": {"id": "360", "displayName": "Manchester United", "shortDisplayName": "Man United"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "739900",
+      "date": "2026-08-15T14:00Z",
+      "name": "Already played",
+      "status": {"type": {"name": "STATUS_FULL_TIME"}},
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {"id": "331", "displayName": "Everton", "shortDisplayName": "Everton"}
+            },
+            {
+              "homeAway": "away",
+              "team": {"id": "384", "displayName": "Crystal Palace", "shortDisplayName": "Crystal Palace"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -150,3 +150,18 @@ class FixtureComparison(BaseModel):
     home: list[FixtureRow]
     away: list[FixtureRow]
     h2h: list[FixtureRow]
+
+
+class UpcomingFixture(BaseModel):
+    """One scheduled fixture from the upcoming feed (ADR 0009) — display-only,
+    no stats; links into the Fixture view by team pair."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    fixture_id: int
+    date: dt.datetime
+    competition: str
+    home_id: int
+    home_name: str
+    away_id: int
+    away_name: str

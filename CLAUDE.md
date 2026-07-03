@@ -30,7 +30,7 @@ Personal, single-user web app for **betting research**. Ingests free football da
 - `club_cup` / `club_european` / `international` team data → **FBref** (football-data.co.uk does NOT cover cups).
 - **All** player event-count data, every scope → **FBref** (shots, SoT, tackles, fouls, cards, minutes, goals, assists).
 - **xG (team + player)** → **deferred out of v1**; `team_match.xg` / `player_match.xg` stay NULL (see `docs/adr/0002`). FBref lost xG (Jan 2026); soccerdata 1.9.0 removed FotMob. Documented future path: Understat, **Premier League only** (top-5 leagues), ingestion-layer only.
-- **Schedule / upcoming Fixtures** → **FBref `read_schedule`** (its `fbref_match_id` aligns with the match-stat pages, keeping incremental dedup clean). ESPN is fallback only.
+- **Finished-match `game_id`s** (player pipeline) → **FBref `read_schedule`** (its `fbref_match_id` aligns with the match-stat pages, keeping incremental dedup clean). **Upcoming scheduled Fixtures** → **ESPN scoreboard JSON** (`ingestion/upcoming.py`, re-run at intervals; display-only, never a stats source; see `docs/adr/0009`).
 
 **v1 scope:** top 4 English tiers (Premier League, Championship, League One, League Two), `club_league` only. Team data confident across all four; player data best-effort + labelled for League One / Two.
 
@@ -42,7 +42,7 @@ Personal, single-user web app for **betting research**. Ingests free football da
 - `misc` → fouls drawn (`Fld`), fouls committed (`Fls`), cards, offsides
 - One match page = both squads, all players. Multiple stat-types for one match = one cached fetch per type, not per player.
 
-**Cross-source reconciliation (three-way):** team/player names differ between FBref, football-data.co.uk, and FotMob ("Man Utd" vs "Manchester United"). Resolve source names → canonical `id` via the `fbref_id` / `fdcouk_name` / `fotmob_id` columns in the ingestion step. Never join on raw display strings.
+**Cross-source reconciliation:** team/player names differ between FBref, football-data.co.uk, ESPN, and FotMob ("Man Utd" vs "Manchester United"). Resolve source names → canonical `id` via the `fbref_id` / `fdcouk_name` / `espn_id` / `fotmob_id` columns in the ingestion step. Never join on raw display strings.
 
 ---
 
@@ -118,6 +118,11 @@ python -m venv .venv
 
 # cup team_match (ADR 0008 follow-up — zero-network, idempotent; run AFTER the cup player backfill)
 .venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + team_stats_extra corners + player-row sums; also accepts "Championship Play-offs"
+
+# upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; re-run at intervals, idempotent)
+.venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
+# fails loud on unknown ESPN names: extend ESPN_TEAM_ALIASES; a NEWLY PROMOTED
+# (ex-National-League) club must be seeded deliberately first — summer-prep step
 
 # ingestion  (TODO — Phase 5)
 # nightly incremental / roster refresh

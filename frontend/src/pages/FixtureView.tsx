@@ -58,6 +58,7 @@ export default function FixtureView() {
   const [venueHome, setVenueHome] = useState<Venue>('home')
   const [venueAway, setVenueAway] = useState<Venue>('away')
   const [h2hVenue, setH2hVenue] = useState<Venue>('recent')
+  const [h2hComp, setH2hComp] = useState<string>('all')
 
   const [data, setData] = useState<FixtureComparison | null>(null)
   const [loading, setLoading] = useState(false)
@@ -96,10 +97,17 @@ export default function FixtureView() {
         return { fixture_id: a.fixture_id, date: a.date, competition: a.competition, a, b, host, guest }
       })
       .sort((x, y) => +new Date(y.date) - +new Date(x.date))
-    return h2hVenue === 'home' ? out.filter((m) => m.a.is_home)
-      : h2hVenue === 'away' ? out.filter((m) => !m.a.is_home)
-      : out
-  }, [data, h2hVenue])
+    const byComp = h2hComp === 'all' ? out : out.filter((m) => m.competition === h2hComp)
+    return h2hVenue === 'home' ? byComp.filter((m) => m.a.is_home)
+      : h2hVenue === 'away' ? byComp.filter((m) => !m.a.is_home)
+      : byComp
+  }, [data, h2hVenue, h2hComp])
+
+  // competitions present across ALL meetings (chips stay stable while filtering)
+  const h2hComps = useMemo(() => {
+    if (!data) return []
+    return [...new Set(data.h2h.map((r) => r.competition))].sort()
+  }, [data])
 
   if (error)
     return (
@@ -121,7 +129,8 @@ export default function FixtureView() {
         {data.home_name} <span className="text-slate-500">vs</span> {data.away_name}
       </h1>
       <p className="mb-4 text-sm text-slate-500">
-        League fixtures · {data.home_name} (home) vs {data.away_name} (away)
+        {data.home_name} (home) vs {data.away_name} (away) · form: league ·
+        H2H: all meetings incl. cups
       </p>
 
       {/* Mode + window */}
@@ -160,6 +169,9 @@ export default function FixtureView() {
           meetings={meetings}
           h2hVenue={h2hVenue}
           setH2hVenue={setH2hVenue}
+          h2hComp={h2hComp}
+          setH2hComp={setH2hComp}
+          comps={h2hComps}
           record={{ hWins, draws, aWins }}
         />
       ) : (
@@ -231,41 +243,58 @@ function H2HMode({
   meetings,
   h2hVenue,
   setH2hVenue,
+  h2hComp,
+  setH2hComp,
+  comps,
   record,
 }: {
   data: FixtureComparison
   meetings: Array<{ fixture_id: number; date: string; competition: string; a: FixtureRow; b: FixtureRow; host: FixtureRow; guest: FixtureRow }>
   h2hVenue: Venue
   setH2hVenue: (v: Venue) => void
+  h2hComp: string
+  setH2hComp: (v: string) => void
+  comps: string[]
   record: { hWins: number; draws: number; aWins: number }
 }) {
   if (data.h2h.length === 0)
     return (
       <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-4 text-slate-400">
-        No league meetings on record between {data.home_name} and {data.away_name} in the covered seasons.
+        No meetings on record between {data.home_name} and {data.away_name} in the covered seasons.
       </p>
     )
   const aMeetingRows = meetings.map((m) => m.a)
   const bMeetingRows = meetings.map((m) => m.b)
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-3">
           <Record label={`${data.home_name} wins`} value={record.hWins} tone="emerald" />
           <Record label="Draws" value={record.draws} tone="slate" />
           <Record label={`${data.away_name} wins`} value={record.aWins} tone="rose" />
         </div>
-        <Field label={`${data.home_name} venue`}>
-          <Toggle
-            value={h2hVenue}
-            onChange={(v) => setH2hVenue(v as Venue)}
-            options={[
-              ['recent', 'All'],
-              ['home', 'Home'],
-              ['away', 'Away'],
-            ]}
-          />
-        </Field>
+        <div className="flex items-end gap-3">
+          {comps.length > 1 && (
+            <Field label="Competition">
+              <Toggle
+                value={h2hComp}
+                onChange={setH2hComp}
+                options={[['all', 'All'], ...comps.map((c): [string, string] => [c, c])]}
+              />
+            </Field>
+          )}
+          <Field label={`${data.home_name} venue`}>
+            <Toggle
+              value={h2hVenue}
+              onChange={(v) => setH2hVenue(v as Venue)}
+              options={[
+                ['recent', 'All'],
+                ['home', 'Home'],
+                ['away', 'Away'],
+              ]}
+            />
+          </Field>
+        </div>
       </div>
 
       {/* Aggregate over meetings */}

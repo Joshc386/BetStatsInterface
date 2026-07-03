@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Team
-from app.fixtures import fixture_comparison, fixture_detail
+from app.fixtures import fixture_comparison, fixture_detail, upcoming_fixtures
 from app.schemas import (
     CompetitionOut,
     FixtureComparison,
@@ -27,6 +27,7 @@ from app.schemas import (
     SquadForm,
     SquadMember,
     Summary,
+    UpcomingFixture,
 )
 from app.squad import squad_form
 from app.stats import entity_summary, registry
@@ -220,6 +221,18 @@ def fixtures_compare(
         away=[FixtureRow.model_validate(r) for r in blocks["away"]],
         h2h=[FixtureRow.model_validate(r) for r in blocks["h2h"]],
     )
+
+
+@app.get("/fixtures/upcoming", response_model=list[UpcomingFixture])
+def fixtures_upcoming(
+    days: int = Query(14, ge=1, le=60),
+    session: Session = Depends(get_session),
+) -> list[UpcomingFixture]:
+    """The landing-page slate: scheduled fixtures over the next `days` days
+    (ESPN upcoming feed, ADR 0009). Declared before the {fixture_id} route so
+    the literal path wins."""
+    rows = upcoming_fixtures(session, days=days)
+    return [UpcomingFixture.model_validate(r) for r in rows]
 
 
 @app.get("/fixtures/{fixture_id}", response_model=list[FixtureRow])

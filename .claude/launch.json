@@ -11,7 +11,7 @@
     },
     {
       "name": "api",
-      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000"],
       "cwd": "backend",
       "port": 8000
