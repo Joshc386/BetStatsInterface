@@ -118,8 +118,13 @@ after the matches, so the panel is genuinely absent upstream, not stale-cache).
   audited individually — every fixture link verified (page team ids == fixture teams),
   every FBref page internally coherent (corners track crosses/fouls), and the largest
   (Arsenal 13–3 Burnley, PL 2324) confirmed by ESPN. Where they disagree structurally,
-  **fd.co.uk is the wrong side** (incl. one home/away swap and one crossed final-day
-  pair in its own data) — tracked as a separate league-data correction task.
+  **fd.co.uk is usually — not always — the wrong side** (incl. one home/away swap and
+  one crossed final-day pair in its own data). The five cases a third source (ESPN/Opta)
+  confirmed against fd.co.uk are now overridden at ingest via
+  `team_match.CSV_CORRECTIONS` (fail-loud, applied to the raw CSV row so re-running the
+  backfill can't reinstate them). Blackburn–Birmingham 2324 proved FBref can be the
+  wrong side too (ESPN sides with fd.co.uk), so **only third-source-confirmed
+  corrections are registered**; unverifiable or ±1-magnitude diffs stay as ingested.
 - **Championship Play-offs team rows built** by the same run: the play-offs were the one
   remaining `club_cup` competition with no `team_match` rows (the ADR 0004 deferral).
   All 15 fixtures had cached pages with the panel → 30 rows, corners included; the CLI's

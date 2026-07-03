@@ -41,6 +41,53 @@ AWAY_MAP = {
 _METRIC_FIELDS = list(HOME_MAP.keys())
 
 
+class CorrectionError(Exception):
+    """A registered CSV correction no longer matches exactly one CSV row."""
+
+
+# Known-wrong football-data.co.uk cells, overridden at ingest so re-running the
+# backfill can never reinstate them. Each entry was found by cross-validating
+# FBref-parsed corners against fd.co.uk (2026-07-03, see docs/adr/0008 corners
+# update) and independently confirmed by a third source (ESPN/Opta) before
+# being registered — FBref alone is NOT sufficient evidence (its Blackburn v
+# Birmingham 2324 corners are wrong where fd.co.uk is right).
+# Key: (fdcouk_key, season, HomeTeam, AwayTeam) exactly as in the CSV.
+CSV_CORRECTIONS: dict[tuple[str, str, str, str], dict[str, int]] = {
+    # ESPN: Arsenal 13-3 Burnley; CSV says 3-3 (dropped digit).
+    ("E0", "2324", "Arsenal", "Burnley"): {"HC": 13},
+    # ESPN: Everton 4, Man City 8; CSV has home/away swapped.
+    ("E0", "2324", "Everton", "Man City"): {"HC": 4, "AC": 8},
+    # ESPN: Hull 2, Preston 11; CSV says 7-2.
+    ("E1", "2324", "Hull", "Preston"): {"HC": 2, "AC": 11},
+    # Final-day 2526: the CSV crossed these two matches' corner values.
+    # ESPN: Sunderland 6, Chelsea 2 / Opta+ESPN: Tottenham 7, Everton 7.
+    ("E0", "2526", "Sunderland", "Chelsea"): {"HC": 6, "AC": 2},
+    ("E0", "2526", "Tottenham", "Everton"): {"HC": 7, "AC": 7},
+}
+
+
+def apply_csv_corrections(df: pd.DataFrame, fdcouk_key: str, season: str) -> pd.DataFrame:
+    """Override known-bad cells in one league-season's results CSV.
+
+    Applied to the raw row so both team perspectives (HOME_MAP/AWAY_MAP) ingest
+    the corrected value. Fails loud if a registered correction matches anything
+    other than exactly one row — a rename/reshape upstream must not silently
+    stop a correction applying.
+    """
+    for (key, ssn, home, away), fixes in CSV_CORRECTIONS.items():
+        if (key, ssn) != (fdcouk_key, season):
+            continue
+        mask = (df["HomeTeam"] == home) & (df["AwayTeam"] == away)
+        n = int(mask.sum())
+        if n != 1:
+            raise CorrectionError(
+                f"correction {key}/{ssn} {home} v {away} matched {n} CSV rows"
+            )
+        for col, value in fixes.items():
+            df.loc[mask, col] = value
+    return df
+
+
 def _to_int(value) -> int | None:
     """football-data stat cells are floats/blanks — coerce to int or None."""
     try:
@@ -84,7 +131,9 @@ def ingest_competition_season(
     session: Session, competition: Competition, season: str, cache: dict[str, int]
 ) -> int:
     """Upsert all fixtures + team_match rows for one league-season. Returns fixtures."""
-    df = read_results(season, competition.fdcouk_key)
+    df = apply_csv_corrections(
+        read_results(season, competition.fdcouk_key), competition.fdcouk_key, season
+    )
     has_time = "Time" in df.columns
     n = 0
     for _, row in df.iterrows():

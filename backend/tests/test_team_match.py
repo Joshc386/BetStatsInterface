@@ -7,8 +7,16 @@ the CSV cross-validation done at ingest time.
 import datetime as dt
 
 import numpy as np
+import pandas as pd
+import pytest
 
-from ingestion.team_match import _parse_kickoff, _to_int
+from ingestion.team_match import (
+    CSV_CORRECTIONS,
+    CorrectionError,
+    _parse_kickoff,
+    _to_int,
+    apply_csv_corrections,
+)
 
 
 def test_to_int_handles_floats_blanks_and_nan():
@@ -33,3 +41,45 @@ def test_parse_kickoff_applies_time_when_present():
 
 def test_parse_kickoff_returns_none_on_garbage():
     assert _parse_kickoff("not-a-date", None) is None
+
+
+def _csv_df(rows):
+    return pd.DataFrame(rows, columns=["HomeTeam", "AwayTeam", "HC", "AC"])
+
+
+def test_apply_csv_corrections_overrides_known_bad_cells():
+    """The Arsenal-Burnley 2324 CSV carries HC=3; ESPN (and FBref) say 13.
+    The correction rewrites the raw cell so BOTH perspectives ingest fixed."""
+    df = _csv_df(
+        [
+            ("Arsenal", "Burnley", 3, 3),
+            ("Everton", "Man City", 8, 4),
+        ]
+    )
+    out = apply_csv_corrections(df, "E0", "2324")
+    assert out.loc[0, "HC"] == 13 and out.loc[0, "AC"] == 3
+    # Everton-Man City is home/away swapped in fd.co.uk -> both cells corrected
+    assert out.loc[1, "HC"] == 4 and out.loc[1, "AC"] == 8
+
+
+def test_apply_csv_corrections_untouched_league_season_passes_through():
+    df = _csv_df([("Arsenal", "Burnley", 3, 3)])
+    out = apply_csv_corrections(df, "E1", "2021")  # no corrections registered
+    assert out.loc[0, "HC"] == 3
+
+
+def test_apply_csv_corrections_fails_loud_when_fixture_missing():
+    """A correction that no longer matches its CSV row (renamed team, dropped
+    row) must raise, not silently stop applying."""
+    df = _csv_df([("Everton", "Man City", 8, 4)])  # Arsenal row absent
+    with pytest.raises(CorrectionError):
+        apply_csv_corrections(df, "E0", "2324")
+
+
+def test_csv_corrections_registry_shape():
+    """Every registered correction targets a known stat column with an int."""
+    for (key, season, home, away), fixes in CSV_CORRECTIONS.items():
+        assert key in ("E0", "E1", "E2", "E3") and len(season) == 4
+        assert home and away and fixes
+        for col, val in fixes.items():
+            assert col in ("HC", "AC") and isinstance(val, int)
