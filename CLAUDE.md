@@ -119,8 +119,11 @@ python -m venv .venv
 # cup team_match (ADR 0008 follow-up — zero-network, idempotent; run AFTER the cup player backfill)
 .venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + team_stats_extra corners + player-row sums; also accepts "Championship Play-offs"
 
-# upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; re-run at intervals, idempotent)
+# upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; idempotent)
 .venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
+# AUTOMATED: Windows Task Scheduler task "BetStats upcoming fixtures" runs
+# backend/run_upcoming.cmd daily 07:30 (catches up after missed starts) ->
+# backend/logs/upcoming.log — check that log first if the slate looks stale.
 # fails loud on unknown ESPN names: extend ESPN_TEAM_ALIASES; a NEWLY PROMOTED
 # (ex-National-League) club must be seeded deliberately first — summer-prep step
 
