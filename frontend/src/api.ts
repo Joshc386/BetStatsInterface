@@ -113,6 +113,25 @@ export interface UpcomingFixture {
   away_name: string
 }
 
+// One club's line in a computed league table (ADR 0010). `adjustment` is the
+// season's administrative points change (negative = deduction), already
+// included in `points`.
+export interface TableRow {
+  position: number
+  team_id: number
+  team_name: string
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  gf: number
+  ga: number
+  gd: number
+  points: number
+  adjustment: number
+  adjustment_note: string | null
+}
+
 // Squad-form panel — the club's Recent squad + each member's raw appearance rows
 // at the club, which the client windows + aggregates (mirrors backend SquadForm;
 // see docs/adr/0006). Membership = club of the player's most-recent appearance.
@@ -203,4 +222,9 @@ export const api = {
     getJSON<UpcomingFixture[]>(`/fixtures/upcoming?days=${days}`),
   squadForm: (teamId: number, cap = 30) =>
     getJSON<SquadForm>(`/teams/${teamId}/squad-form?cap=${cap}`),
+  table: (competitionId: number, season?: string) => {
+    const sp = new URLSearchParams({ competition_id: String(competitionId) })
+    if (season) sp.set('season', season)
+    return getJSON<TableRow[]>(`/table?${sp}`)
+  },
 }

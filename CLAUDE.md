@@ -127,6 +127,10 @@ python -m venv .venv
 # fails loud on unknown ESPN names: extend ESPN_TEAM_ALIASES; a NEWLY PROMOTED
 # (ex-National-League) club must be seeded deliberately first — summer-prep step
 
+# points deductions (ADR 0010 — ESPN standings; feeds the computed GET /table)
+.venv/Scripts/python.exe -m ingestion.points_adjustments          # dry-run: print found deductions
+.venv/Scripts/python.exe -m ingestion.points_adjustments --apply  # upsert (idempotent; re-run for new rulings)
+
 # ingestion  (TODO — Phase 5)
 # nightly incremental / roster refresh
 ```

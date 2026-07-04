@@ -7,6 +7,7 @@ import SearchPage from './pages/SearchPage.tsx'
 import EntityView from './pages/EntityView.tsx'
 import PlayerView from './pages/PlayerView.tsx'
 import FixtureView from './pages/FixtureView.tsx'
+import TablePage from './pages/TablePage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="team/:id" element={<EntityView entity="team" />} />
           <Route path="player/:id" element={<PlayerView />} />
           <Route path="fixture/:homeId/vs/:awayId" element={<FixtureView />} />
+          <Route path="table" element={<TablePage />} />
         </Route>
       </Routes>
     </BrowserRouter>

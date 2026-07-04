@@ -7,6 +7,7 @@ is populated (pending FBref access).
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -27,10 +28,12 @@ from app.schemas import (
     SquadForm,
     SquadMember,
     Summary,
+    TableRow,
     UpcomingFixture,
 )
 from app.squad import squad_form
 from app.stats import entity_summary, registry
+from app.table import league_seasons, league_table
 
 app = FastAPI(title="BetStats Research API", version="0.1.0")
 
@@ -194,6 +197,31 @@ def team_squad_form(
         members=[SquadMember.model_validate(m) for m in data["members"]],
         rows=[SquadAppearanceRow.model_validate(r) for r in data["rows"]],
     )
+
+
+@app.get("/table", response_model=list[TableRow])
+def table(
+    competition_id: int = Query(..., description="a club_league competition"),
+    season: str | None = Query(None, description="season tag (e.g. 2526); omit for latest"),
+    as_of: dt.date | None = Query(None, description="standings as of this date (inclusive)"),
+    session: Session = Depends(get_session),
+) -> list[TableRow]:
+    """Computed league table (ADR 0010) — an aggregation over team_match plus
+    the points_adjustments deductions; never fetched from a provider."""
+    competition = session.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(404, f"competition {competition_id} not found")
+    if competition.type != "club_league":
+        raise HTTPException(422, f"'{competition.name}' is not a league")
+    if season is None:
+        available = league_seasons(session, competition_id)
+        if not available:
+            return []
+        season = available[-1]
+    rows = league_table(
+        session, competition_id=competition_id, season=season, as_of=as_of
+    )
+    return [TableRow(**r) for r in rows]
 
 
 @app.get("/fixtures/compare", response_model=FixtureComparison)

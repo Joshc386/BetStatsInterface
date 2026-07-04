@@ -198,3 +198,27 @@ class Squad(Base):
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False)
     last_seen: Mapped[dt.date | None] = mapped_column(Date)
+
+
+class PointsAdjustment(Base):
+    """An administrative points change (a deduction, negative) applied to one
+    club's league total for one season — the sole standings input a computed
+    table cannot derive from results. One row per club-season (rulings summed,
+    matching the ESPN standings feed it is seeded from); `note` records why."""
+
+    __tablename__ = "points_adjustments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(
+        ForeignKey("competitions.id"), nullable=False
+    )
+    season: Mapped[str] = mapped_column(Text, nullable=False)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
+    points: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "competition_id", "season", "team_id", name="uq_points_adjustment"
+        ),
+    )

@@ -152,6 +152,26 @@ class FixtureComparison(BaseModel):
     h2h: list[FixtureRow]
 
 
+class TableRow(BaseModel):
+    """One club's line in a computed league table (ADR 0010). `adjustment` is
+    the season's administrative points change (negative = deduction), already
+    included in `points`; `adjustment_note` says why."""
+
+    position: int
+    team_id: int
+    team_name: str
+    played: int
+    won: int
+    drawn: int
+    lost: int
+    gf: int
+    ga: int
+    gd: int
+    points: int
+    adjustment: int
+    adjustment_note: str | None
+
+
 class UpcomingFixture(BaseModel):
     """One scheduled fixture from the upcoming feed (ADR 0009) — display-only,
     no stats; links into the Fixture view by team pair."""
