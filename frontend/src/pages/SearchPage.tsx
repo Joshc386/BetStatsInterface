@@ -19,8 +19,8 @@ export default function SearchPage() {
       </div>
       <UpcomingSlate />
       <p className="mt-8 text-center text-xs text-slate-600">
-        Team data: top 4 English tiers, 6 seasons. Player data: Premier League,
-        3 seasons.
+        Team data: top 4 English tiers, 6 seasons. Player data: Premier League
+        &amp; Championship + domestic cups, 6 seasons.
       </p>
     </div>
   )

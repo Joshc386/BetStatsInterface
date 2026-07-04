@@ -148,6 +148,12 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "Sutton United": "Sutton",
     "Tranmere Rovers": "Tranmere",
     "Wigan Athletic": "Wigan",
+    # 2021-2223 cup draws (6-season backfill sweep, 2026-07-04): two caught by the
+    # resolve_or_create first-word guard, two by resolve_fbref_team's fail-loud.
+    "Forest Green Rovers": "Forest Green",
+    "Hartlepool United": "Hartlepool",
+    "Oldham Athletic": "Oldham",
+    "Swindon Town": "Swindon",
 }
 
 
