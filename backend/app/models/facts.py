@@ -49,6 +49,10 @@ class Fixture(Base):
     home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
     away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
     status: Mapped[str] = mapped_column(fixture_status_enum, nullable=False)
+    # Round within a knockout/European competition ("League phase", "Round of
+    # 16", …). Part of the natural key: European rematches repeat the same
+    # orientation in one season (ADR 0011). '' outside European ingestion.
+    stage: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     fbref_match_id: Mapped[str | None] = mapped_column(Text)
     fdcouk_ref: Mapped[str | None] = mapped_column(Text)
 
@@ -58,6 +62,7 @@ class Fixture(Base):
             "season",
             "home_team_id",
             "away_team_id",
+            "stage",
             name="uq_fixture_natural",
         ),
         Index(

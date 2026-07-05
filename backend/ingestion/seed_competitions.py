@@ -11,25 +11,32 @@ from sqlalchemy.dialects.postgresql import insert
 from app.db import SessionLocal
 from app.models.reference import Competition
 
-# name, type, tier, fdcouk_key, fbref_key
-#   tier is the English-pyramid rank (league only); None for the knockout.
+# name, type, country, tier, fdcouk_key, fbref_key
+#   tier is the English-pyramid rank (league only); None for the knockouts.
+#   country is None for the UEFA competitions (not national competitions).
 #   fdcouk_key is None where football-data.co.uk doesn't cover the competition.
 #   fbref_key is None where the competition has no standalone FBref page — the
 #   play-offs are sourced from the Championship schedule (round = "play-offs").
 COMPETITIONS = [
-    ("Premier League", "club_league", 1, "E0", "Premier League"),
-    ("Championship", "club_league", 2, "E1", "Championship"),
-    ("League One", "club_league", 3, "E2", None),
-    ("League Two", "club_league", 4, "E3", None),
+    ("Premier League", "club_league", "England", 1, "E0", "Premier League"),
+    ("Championship", "club_league", "England", 2, "E1", "Championship"),
+    ("League One", "club_league", "England", 3, "E2", None),
+    ("League Two", "club_league", "England", 4, "E3", None),
     # Promotion play-offs: 3rd-6th play two-legged semis + a Wembley final.
     # Domestic knockout (club_cup) so it never counts as league form; player
     # data only (football-data.co.uk has no play-off coverage).
-    ("Championship Play-offs", "club_cup", None, None, None),
+    ("Championship Play-offs", "club_cup", "England", None, None, None),
     # Domestic cups (ADR 0008): player-only, FBref-sourced (fbref_key set;
     # football-data.co.uk does not cover cups, so fdcouk_key=None). Distinct
     # competition_id keeps "FA Cup form" and "EFL Cup form" separable.
-    ("FA Cup", "club_cup", None, None, "FA Cup"),
-    ("EFL Cup", "club_cup", None, None, "EFL Cup"),
+    ("FA Cup", "club_cup", "England", None, None, "FA Cup"),
+    ("EFL Cup", "club_cup", "England", None, None, "EFL Cup"),
+    # European club competitions (ADR 0011): covered ties only, FBref-sourced.
+    # fbref_key is the exact name on FBref's comps index (verified from cache).
+    ("Champions League", "club_european", None, None, None, "UEFA Champions League"),
+    ("Europa League", "club_european", None, None, None, "UEFA Europa League"),
+    ("Conference League", "club_european", None, None, None, "UEFA Conference League"),
+    ("UEFA Super Cup", "club_european", None, None, None, "UEFA Super Cup"),
 ]
 
 
@@ -38,12 +45,12 @@ def seed_competitions() -> int:
         {
             "name": name,
             "type": ctype,
-            "country": "England",
+            "country": country,
             "tier": tier,
             "fdcouk_key": fdcouk_key,
             "fbref_key": fbref_key,
         }
-        for (name, ctype, tier, fdcouk_key, fbref_key) in COMPETITIONS
+        for (name, ctype, country, tier, fdcouk_key, fbref_key) in COMPETITIONS
     ]
     stmt = insert(Competition).values(rows)
     stmt = stmt.on_conflict_do_update(

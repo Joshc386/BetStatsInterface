@@ -15,12 +15,14 @@ import pytest
 
 from ingestion.cups import (
     _already_ingested,
+    _guard_token,
     _team_stat_totals,
     covered_team_ids,
     get_or_create_cup_fixture,
     pair_team_ids,
     resolve_or_create_fbref_team,
     select_covered_games,
+    split_country_code,
 )
 from ingestion.players import UnknownTeamError
 from app.db import SessionLocal
@@ -103,7 +105,8 @@ def test_one_cup_fixture_per_fbref_match_id():
                 SELECT f.fbref_match_id, COUNT(*) AS n
                 FROM fixtures f
                 JOIN competitions c ON c.id = f.competition_id
-                WHERE c.type = 'club_cup' AND f.fbref_match_id IS NOT NULL
+                WHERE c.type IN ('club_cup', 'club_european')
+                  AND f.fbref_match_id IS NOT NULL
                 GROUP BY f.fbref_match_id
                 HAVING COUNT(*) > 1
                 """
@@ -267,7 +270,8 @@ def test_cup_fixture_team_match_rows_are_zero_or_two_never_partial():
                 """
                 SELECT f.id, f.fbref_match_id, COUNT(tm.id) AS n
                 FROM fixtures f
-                JOIN competitions c ON c.id = f.competition_id AND c.type = 'club_cup'
+                JOIN competitions c ON c.id = f.competition_id
+                    AND c.type IN ('club_cup', 'club_european')
                 LEFT JOIN team_match tm ON tm.fixture_id = f.id
                 GROUP BY f.id, f.fbref_match_id
                 HAVING COUNT(tm.id) NOT IN (0, 2)
@@ -440,3 +444,104 @@ def test_resolve_or_create_links_handle_onto_existing_row_no_duplicate():
         assert got.id == t.id
         assert got.fbref_id == "zzseam01"
         session.rollback()
+
+
+# --- European extension (ADR 0011) ------------------------------------------
+
+
+def test_stage_disambiguates_european_rematches():
+    """The Benfica-Barcelona case: the same pairing at the same venue recurs in
+    one European season across stages (league phase + knockout leg). Different
+    stage -> distinct fixtures; same stage -> idempotent get-or-create. Rolled
+    back."""
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == "Champions League")
+        )
+        assert comp is not None and comp.type == "club_european"
+        a = Team(canonical_name="__ZZ Euro Hosts__")
+        b = Team(canonical_name="__YY Euro Visitors__")
+        session.add_all([a, b])
+        session.flush()
+        d1 = dt.datetime(2025, 10, 1, tzinfo=dt.timezone.utc)
+        d2 = dt.datetime(2026, 2, 18, tzinfo=dt.timezone.utc)
+
+        league_phase = get_or_create_cup_fixture(
+            session, comp, "2526", a, b, d1, "zzeur001", stage="League phase"
+        )
+        knockout = get_or_create_cup_fixture(
+            session, comp, "2526", a, b, d2, "zzeur002", stage="Round of 16"
+        )
+        assert league_phase.id != knockout.id  # two real fixtures, no rejection
+
+        again = get_or_create_cup_fixture(
+            session, comp, "2526", a, b, d1, "zzeur001", stage="League phase"
+        )
+        assert again.id == league_phase.id  # same stage -> idempotent
+        session.rollback()
+
+
+def test_guard_token_skips_generic_prefixes():
+    """At European volume, first-word matching would deadlock unrelated clubs
+    ('FC Porto' vs 'FC Copenhagen'); the guard token is the first NON-generic
+    token, which still catches the alt-spelling signature it exists for."""
+    assert _guard_token("FC Porto") == "porto"
+    assert _guard_token("FC Copenhagen") == "copenhagen"
+    assert _guard_token("Real Madrid") == "madrid"
+    assert _guard_token("Real Sociedad") == "sociedad"
+    assert _guard_token("AFC Wimbledon") == "wimbledon"
+    assert _guard_token("1. FC Köln") == "köln"
+    # the original duplicate signature still collides
+    assert _guard_token("Bradford City") == _guard_token("Bradford")
+    # an all-generic name degrades to its first token, never crashes
+    assert _guard_token("Real") == "real"
+
+
+def test_generic_prefix_clubs_do_not_deadlock_creation():
+    """Two genuinely-distinct clubs sharing only a generic prefix are both
+    auto-created; no allowlist entry needed. Rolled back."""
+    with SessionLocal() as session:
+        first, created1 = resolve_or_create_fbref_team(
+            session, "FC __ZZportu__", fbref_id="zzeurt01", country="Portugal"
+        )
+        second, created2 = resolve_or_create_fbref_team(
+            session, "FC __YYcopen__", fbref_id="zzeurt02", country="Denmark"
+        )
+        assert created1 and created2
+        assert first.country == "Portugal" and second.country == "Denmark"
+        session.rollback()
+
+
+def test_split_country_code_handles_lead_trail_and_absence():
+    """FBref European schedules carry a country code adjacent to team names
+    (leading or trailing); domestic names pass through untouched — uppercase
+    or long tokens are never eaten."""
+    assert split_country_code("eng Arsenal") == ("Arsenal", "eng")
+    assert split_country_code("Bayern Munich de") == ("Bayern Munich", "de")
+    assert split_country_code("Manchester Utd") == ("Manchester Utd", None)
+    assert split_country_code("St Albans") == ("St Albans", None)
+    assert split_country_code("Wolves") == ("Wolves", None)
+
+
+def test_select_covered_games_carries_stage_and_strips_codes():
+    """A synthetic European schedule: the covered-tie filter matches through the
+    country codes, and each kept game carries its round as stage plus mapped
+    countries for auto-create."""
+    df = pd.DataFrame(
+        [
+            {"home_team": "eng Manchester Utd", "away_team": "__ZZ Fremmed__ dk",
+             "game_id": "eeee5555", "date": "2025-10-01", "round": "League phase"},
+            # foreign vs foreign -> not covered -> dropped
+            {"home_team": "es __ZZ Blancos__", "away_team": "de __ZZ Roten__",
+             "game_id": "ffff6666", "date": "2025-10-01", "round": "League phase"},
+        ]
+    )
+    with SessionLocal() as session:
+        games = select_covered_games(session, df, "2425")
+        assert [g["game_id"] for g in games] == ["eeee5555"]
+        (game,) = games
+        assert game["stage"] == "League phase"
+        assert game["home_name"] == "Manchester Utd"
+        assert game["away_name"] == "__ZZ Fremmed__"
+        assert game["home_country"] == "England"
+        assert game["away_country"] == "Denmark"

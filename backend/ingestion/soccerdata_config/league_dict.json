@@ -24,5 +24,25 @@
         "FBref": "EFL Cup",
         "season_start": "Aug",
         "season_end": "May"
+    },
+    "EUR-Champions League": {
+        "FBref": "UEFA Champions League",
+        "season_start": "Jul",
+        "season_end": "Jun"
+    },
+    "EUR-Europa League": {
+        "FBref": "UEFA Europa League",
+        "season_start": "Jul",
+        "season_end": "Jun"
+    },
+    "EUR-Conference League": {
+        "FBref": "UEFA Conference League",
+        "season_start": "Jul",
+        "season_end": "Jun"
+    },
+    "EUR-Super Cup": {
+        "FBref": "UEFA Super Cup",
+        "season_start": "Aug",
+        "season_end": "Aug"
     }
 }

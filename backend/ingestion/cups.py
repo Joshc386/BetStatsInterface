@@ -1,22 +1,30 @@
-"""Phase B (ADR 0008) — domestic-cup player-match ingestion (FA Cup, EFL Cup).
+"""Knockout-competition player-match ingestion — domestic cups (ADR 0008) and
+European club competitions (ADR 0011).
 
-Cups have no football-data.co.uk fixtures to match against, so unlike the league
-path this *creates* fixtures from the FBref cup schedule, scoped to ties with at
-least one covered (Premier League / Championship) club that season. Unknown
-opponents (random-draw lower-/non-league clubs) are auto-created and logged, per
-ADR 0007 — EXCEPT when the name looks like an existing club under a different
-spelling, which fails loud instead (14 in-universe clubs were silently duplicated
-this way before 2026-07-03; a dropped tie is recoverable via alias + re-run, a
-duplicate row silently splits a club's history). Both squads come along via the
+These competitions have no football-data.co.uk fixtures to match against, so
+unlike the league path this *creates* fixtures from the FBref schedule, scoped
+to Covered ties: at least one covered (Premier League / Championship) club that
+season. Unknown opponents (random-draw lower-/non-league clubs; foreign clubs
+in Europe) are auto-created and logged, per ADR 0007 — EXCEPT when the name
+looks like an existing club under a different spelling, which fails loud
+instead (14 in-universe clubs were silently duplicated this way before
+2026-07-03; a dropped tie is recoverable via alias + re-run, a duplicate row
+silently splits a club's history). Both squads come along via the
 competition-agnostic ``ingest_match``.
 
-Live cup fetches require the VPN OFF and ride the watchdog supervisor (one-shot
+European fixtures carry ``stage`` (the schedule round) in the natural key —
+the same pairing can recur at the same venue within one European season
+(league phase + knockout leg; pre-2024 group + knockout rematches), which
+domestic knockouts structurally cannot (ADR 0011, migration 0005).
+
+Live fetches require the VPN OFF and ride the watchdog supervisor (one-shot
 fetches hang on Cloudflare). See memory: cups-internationals-sourcing.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 import pandas as pd
 from sqlalchemy import func, select
@@ -69,52 +77,119 @@ def covered_team_ids(session: Session, season: str) -> set[int]:
 # vs the league "Oxford"). Empty until such a club actually appears in a draw.
 CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset()
 
+# Generic club-name prefixes skipped when picking the guard token below: at
+# European volume, first-word matching alone would deadlock on unrelated clubs
+# ("FC Porto" vs "FC Copenhagen"). The guard compares the first NON-generic
+# token instead — which also sharpens it domestically ("AFC Wimbledon" guards
+# on "wimbledon", not "afc").
+GENERIC_NAME_TOKENS = frozenset(
+    "fc afc ac as cf sc sk fk sl ss rb cd rc sd us st 1 real sporting "
+    "dinamo dynamo red inter".split()
+)
+
+
+def _guard_token(name: str) -> str:
+    """The first non-generic token of a club name, casefolded (the duplicate-
+    spelling signature the auto-create guard compares on)."""
+    tokens = [t for t in re.split(r"[\s.]+", name) if t]
+    for t in tokens:
+        if t.casefold() not in GENERIC_NAME_TOKENS:
+            return t.casefold()
+    return tokens[0].casefold() if tokens else ""
+
+
+# FBref schedule team names in European competitions carry a country code
+# adjacent to the name ("eng Arsenal" / "Bayern Munich de"). Split it off for
+# matching, and map it to the country stored on auto-created teams. Codes are
+# FBref's own; the map fills out as competitions are ingested (unknown codes
+# log + leave country NULL — re-runs heal it once mapped).
+FBREF_COUNTRY_CODES = {
+    "eng": "England", "sct": "Scotland", "wls": "Wales", "nir": "Northern Ireland",
+    "ie": "Ireland", "es": "Spain", "de": "Germany", "it": "Italy", "fr": "France",
+    "pt": "Portugal", "nl": "Netherlands", "be": "Belgium", "at": "Austria",
+    "ch": "Switzerland", "tr": "Turkey", "gr": "Greece", "ua": "Ukraine",
+    "cz": "Czechia", "hr": "Croatia", "rs": "Serbia", "dk": "Denmark",
+    "se": "Sweden", "no": "Norway", "pl": "Poland", "ro": "Romania",
+    "hu": "Hungary", "sk": "Slovakia", "si": "Slovenia", "bg": "Bulgaria",
+    "cy": "Cyprus", "il": "Israel", "az": "Azerbaijan", "kz": "Kazakhstan",
+    "by": "Belarus", "md": "Moldova", "mk": "North Macedonia", "al": "Albania",
+    "ba": "Bosnia and Herzegovina", "me": "Montenegro", "xk": "Kosovo",
+    "lv": "Latvia", "lt": "Lithuania", "ee": "Estonia", "fi": "Finland",
+    "is": "Iceland", "fo": "Faroe Islands", "mt": "Malta", "lu": "Luxembourg",
+    "am": "Armenia", "ge": "Georgia", "ad": "Andorra", "sm": "San Marino",
+    "gi": "Gibraltar", "li": "Liechtenstein", "ru": "Russia",
+}
+
+_COUNTRY_CODE_RE = re.compile(r"^(?:([a-z]{2,3})\s+)?(.*?)(?:\s+([a-z]{2,3}))?$")
+
+
+def split_country_code(raw_name: str) -> tuple[str, str | None]:
+    """Split an FBref schedule team name from its adjacent country code.
+
+    Returns ``(name, code)`` — code None when no lowercase 2-3 letter token
+    leads or trails the name (domestic schedules carry none, so this is a
+    no-op for cups). Only fully-lowercase tokens qualify, so club words
+    ("St", "Port") are never eaten.
+    """
+    m = _COUNTRY_CODE_RE.match(raw_name.strip())
+    if m is None:  # pragma: no cover - the pattern matches any string
+        return raw_name.strip(), None
+    lead, name, trail = m.groups()
+    return name.strip(), lead or trail
+
 
 def resolve_or_create_fbref_team(
-    session: Session, fbref_name: str, fbref_id: str
+    session: Session, fbref_name: str, fbref_id: str, country: str | None = None
 ) -> tuple[Team, bool]:
-    """Resolve an FBref cup team to a canonical row, creating it if genuinely new.
+    """Resolve an FBref cup/European team to a canonical row, creating if new.
 
     Id-first, then deterministic name/alias match (`match_existing_team`); on a
     name match the fbref_id is attached (the seam link) so no duplicate is made.
     Only when nothing matches is a new row created (auto-create + log, ADR 0008) —
-    this is the one place cups diverge from the league path's fail-loud rule.
-    Guard: creation is refused when an existing team shares the name's first word,
-    the signature of an in-universe club under a different FBref spelling
-    ("Bradford City" vs canonical "Bradford") — that needs an alias, not a new row.
+    this is the one place this path diverges from the league fail-loud rule.
+    Guard: creation is refused when an existing team shares the name's first
+    non-generic token (`_guard_token`), the signature of an in-universe club
+    under a different FBref spelling ("Bradford City" vs canonical "Bradford") —
+    that needs an alias, not a new row. `country` (from the schedule's country
+    code, ADR 0011) is stored on creation and back-filled on a NULL-country
+    match, so re-runs heal rows created before the code was mapped.
     Returns ``(team, created)``.
     """
     by_id = session.scalar(select(Team).where(Team.fbref_id == fbref_id))
     if by_id is not None:
+        if country and not by_id.country:
+            by_id.country = country
         return by_id, False
 
     existing = match_existing_team(session, fbref_name)
     if existing is not None:
         if not existing.fbref_id:
             existing.fbref_id = fbref_id  # attach the seam handle
+        if country and not existing.country:
+            existing.country = country
         return existing, False
 
     name = clean_name(fbref_name)
     if name not in CUP_CREATE_ALLOWLIST:
-        first = name.split()[0].casefold()
+        token = _guard_token(name)
         suspects = sorted(
             t.canonical_name
             for t in session.scalars(select(Team))
             if any(
-                n.split()[0].casefold() == first
+                _guard_token(n) == token
                 for n in (t.canonical_name, t.fdcouk_name)
                 if n
             )
         )
         if suspects:
             raise UnknownTeamError(
-                f"refusing to auto-create cup team {name!r}: existing team(s) "
-                f"{suspects} share its first word and may be the same club. Same "
-                "club -> add a FBREF_TEAM_ALIASES entry; genuinely distinct -> "
-                "add it to CUP_CREATE_ALLOWLIST."
+                f"refusing to auto-create team {name!r}: existing team(s) "
+                f"{suspects} share its guard token {token!r} and may be the same "
+                "club. Same club -> add a FBREF_TEAM_ALIASES entry; genuinely "
+                "distinct -> add it to CUP_CREATE_ALLOWLIST."
             )
 
-    team = Team(canonical_name=name, fbref_id=fbref_id)
+    team = Team(canonical_name=name, fbref_id=fbref_id, country=country)
     session.add(team)
     session.flush()
     return team, True
@@ -137,17 +212,27 @@ def select_covered_games(
         game_id = row.get("game_id")
         if game_id is None or pd.isna(game_id):
             continue
-        home = match_existing_team(session, row["home_team"])
-        away = match_existing_team(session, row["away_team"])
+        # European schedule names carry adjacent country codes; domestic don't
+        # (split is a no-op there). Match on the cleaned name.
+        home_name, home_code = split_country_code(str(row["home_team"]))
+        away_name, away_code = split_country_code(str(row["away_team"]))
+        home = match_existing_team(session, home_name)
+        away = match_existing_team(session, away_name)
         if (home is not None and home.id in covered) or (
             away is not None and away.id in covered
         ):
+            round_ = row.get("round")
             games.append(
                 {
                     "game_id": str(game_id),
                     "date": _schedule_date(row),
-                    "home_name": row["home_team"],
-                    "away_name": row["away_team"],
+                    "home_name": home_name,
+                    "away_name": away_name,
+                    "home_country": FBREF_COUNTRY_CODES.get(home_code or ""),
+                    "away_country": FBREF_COUNTRY_CODES.get(away_code or ""),
+                    # stage joins the fixture natural key (European rematches
+                    # repeat an orientation within a season, ADR 0011)
+                    "stage": "" if round_ is None or pd.isna(round_) else str(round_),
                 }
             )
     return games
@@ -177,14 +262,17 @@ def get_or_create_cup_fixture(
     away: Team,
     date: dt.datetime,
     game_id: str,
+    stage: str = "",
 ) -> Fixture:
-    """Get-or-create the cup Fixture under its own competition, idempotently.
+    """Get-or-create a knockout/European Fixture under its own competition,
+    idempotently.
 
-    football-data.co.uk does not cover cups, so (unlike league fixtures) there is
-    no pre-existing row — we create it here, player data only. The natural key
-    (competition_id, season, home, away) is collision-safe for cups (replays/
-    two-legged ties swap venue → distinct orientation; FA/EFL/league meetings of
-    the same clubs differ by competition_id).
+    football-data.co.uk does not cover these, so (unlike league fixtures) there
+    is no pre-existing row — we create it here. The natural key is
+    (competition_id, season, home, away, stage): domestic cups pass stage=''
+    (their structure never repeats an orientation in a season — replays and
+    two-legged ties swap venue); European competitions pass the schedule round,
+    because the same orientation CAN recur across stages there (ADR 0011).
     """
     fixture = session.scalar(
         select(Fixture).where(
@@ -192,6 +280,7 @@ def get_or_create_cup_fixture(
             Fixture.season == season,
             Fixture.home_team_id == home.id,
             Fixture.away_team_id == away.id,
+            Fixture.stage == stage,
         )
     )
     if fixture is None:
@@ -202,6 +291,7 @@ def get_or_create_cup_fixture(
             home_team_id=home.id,
             away_team_id=away.id,
             status="finished",
+            stage=stage,
             fbref_match_id=game_id,
         )
         session.add(fixture)
@@ -292,18 +382,22 @@ def backfill_cup_season(
                     skipped.append(f"{game_id}: could not pair teams to ids")
                     continue
                 home, h_new = resolve_or_create_fbref_team(
-                    session, game["home_name"], home_id
+                    session, game["home_name"], home_id, game.get("home_country")
                 )
                 away, a_new = resolve_or_create_fbref_team(
-                    session, game["away_name"], away_id
+                    session, game["away_name"], away_id, game.get("away_country")
                 )
                 created_teams += int(h_new) + int(a_new)
                 if h_new:
                     log(f"  + created team {home.canonical_name!r} ({home_id})")
                 if a_new:
                     log(f"  + created team {away.canonical_name!r} ({away_id})")
+                # stage disambiguates only European fixtures; domestic cups keep
+                # '' so their existing rows and re-run idempotency are untouched
+                stage = game["stage"] if competition.type == "club_european" else ""
                 fixture = get_or_create_cup_fixture(
-                    session, competition, season, home, away, game["date"], game_id
+                    session, competition, season, home, away, game["date"], game_id,
+                    stage=stage,
                 )
                 # ingest immediately while the page df is in hand (resumable)
                 n = ingest_match(
@@ -384,8 +478,8 @@ def backfill_cup_team_match(
     player_match rows; shots/sot_conceded from the opposite side. xg stays NULL
     (deferred). Idempotent on (fixture_id, team_id). A fixture with no cached
     page, no scorebox, or no player rows yet is skipped + logged (ADR 0008
-    team-data follow-up). Works for any seeded club_cup competition whose
-    fixtures carry an fbref_match_id (FA Cup, EFL Cup, Championship Play-offs).
+    team-data follow-up). Works for any seeded club_cup / club_european
+    competition whose fixtures carry an fbref_match_id.
     """
     with SessionLocal() as session:
         competition = session.scalar(
@@ -433,7 +527,7 @@ def backfill_cup_team_match(
                 vals = {
                     "fixture_id": fx.id,
                     "competition_id": competition.id,
-                    "competition_type": "club_cup",
+                    "competition_type": competition.type,
                     "season": season,
                     "date": fx.date,
                     "team_id": team_id,
@@ -468,10 +562,15 @@ def backfill_cup_team_match(
         }
 
 
-# Operator-facing: cup competitions this backfill can ingest -> soccerdata league.
+# Operator-facing: competitions this backfill can ingest -> soccerdata league.
+# (run_backfill.py dispatches any of these to the supervised cup path.)
 LEAGUE_IDS = {
     "FA Cup": "ENG-FA Cup",
     "EFL Cup": "ENG-EFL Cup",
+    "Champions League": "EUR-Champions League",
+    "Europa League": "EUR-Europa League",
+    "Conference League": "EUR-Conference League",
+    "UEFA Super Cup": "EUR-Super Cup",
 }
 
 
