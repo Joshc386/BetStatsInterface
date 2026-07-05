@@ -55,18 +55,22 @@ _Avoid_: form (form is measured vs all opponents; H2H is vs one specific team).
 ### Scope & coverage
 
 **Competition Type**:
-The scope tag on every fact row, one of `club_league` | `club_cup` | `club_european` | `international`. "Last N games" is meaningless without it — a window is always read within a scope.
+The scope tag on every fact row, one of `club_league` | `club_cup` | `club_european` | `international`. "Last N games" is meaningless without it — a window is read within a scope **by default**; an explicit all-competitions window ("last N games played, regardless of competition") is a legitimate user choice, honest only to the extent competitive coverage is complete, and always labelled — never the silent default.
 
 **v1 scope**:
 The top four English tiers — Premier League, Championship, League One, League Two — `club_league` first, now extending into domestic cups (`club_cup`). **Team** data is confident across all four tiers (football-data.co.uk), league-only. **Player** data is confident for PL + Championship but **best-effort for League One / League Two** (Opta's lower-tier coverage was always thin, compounded by FBref's Jan-2026 removal) — verified at backfill and labelled in the UI as "covered competitions only", never implied complete. The first scope expansion added **FA Cup / EFL Cup player AND team data** for **Covered ties** (see below), including corners (see `docs/adr/0008`).
 
 **Covered tie**:
-A cup **Fixture** the project ingests: a tie with **at least one Premier League or Championship club in that season**. Decided season-aware from `team_match` (the club has league rows in PL/Championship that season), so a club relegated out of the top two does not pull its cup ties into an untracked season. This excludes the lower-/non-league-only early rounds; the opponent's players (often League One/Two) are ingested too as a bonus toward later coverage. The filter loosens as League One/Two player data lands.
-_Avoid_: treating every tie in a cup's schedule as in scope.
+A cup or European **Fixture** the project ingests: a tie with **at least one Premier League or Championship club in that season**. Decided season-aware from `team_match` (the club has league rows in PL/Championship that season), so a club relegated out of the top two does not pull its cup ties into an untracked season. For domestic cups this excludes the lower-/non-league-only early rounds; for European competitions (scoped 2026-07, ingestion pending) it excludes foreign-vs-foreign fixtures. The uncovered opponent — a League One side or a foreign club — is stored in full **for that Fixture** (canonical team row, team + player rows) as a bonus toward later coverage, but its other fixtures are not held: its form windows are partial and never implied complete. The filter loosens as coverage expands (League One/Two player data; other domestic leagues eventually).
+_Avoid_: treating every tie in a competition's schedule as in scope.
 
 **Promotion Play-offs**:
 The end-of-season knockout deciding the last promotion place (Championship/League One/League Two): teams finishing 3rd–6th contest two-legged semi-finals (4 fixtures) then a single neutral-venue final. Modelled as its **own competition** ("Championship Play-offs", **Competition Type** `club_cup`), never as part of the regular season — a play-off leg shares the same home/away orientation as a league meeting, so keeping it under `club_league` collided on the Fixture natural key and contaminated league form (see `docs/adr/0004`). Player data only (football-data.co.uk does not cover play-offs). A "last N **league** games" window therefore excludes them by scope.
 _Avoid_: treating a play-off game as a Championship (league) Fixture.
+
+**Covered international competition** (scoped 2026-07, ingestion pending):
+The boundary for the `international` scope — coverage is decided **by competition, not by nation**. The list: **World Cup, Euros, Copa América, AFCON, Asian Cup, Gold Cup**, their **qualifying campaigns** (all confederations for the World Cup), and the **UEFA Nations League**. Every match in a covered competition is ingested wholesale — no player-derived "covered nation" filter, because English club squads span most footballing nations anyway and a whole-competition rule has no drifting, transfer-dependent boundary. **Friendlies and one-off exhibitions are excluded permanently**: sides don't take them seriously enough for their Metrics to be form signal (the same reasoning that excludes the Club World Cup on the club side). The purpose is **player-data continuity** — a tracked player's competitive caps exist in his **Appearance** history (all-competitions windows, segment-by-competition) — not fixture research; Metric sparsity on minor-confederation pages is accepted and surfaced as NULL (appearance/minutes/goals/cards continuity is itself the signal), never patched from lesser sources.
+_Avoid_: "covered nation" (rejected concept — the filter saved little and drifted with every transfer window); mixing caps into a league window by default (all-competitions is an explicit, labelled choice).
 
 **Squad** (registered roster):
 The set of players currently *registered* to a club, as listed on that club's FBref squad page — *membership*, not appearance history. A new signing who has not played yet is in the Squad; a player loaned out is not (he appears at his loan club). The roster source for this (Job C / FBref squad page, into the `squads` table) is **deferred past v1** (see `docs/adr/0006`); v1 uses **Recent squad** instead. Distinct from a **Player-Match**/**Appearance** (what a player *did*): the Squad decides *who* is shown, Appearances supply *the numbers*.
@@ -80,6 +84,9 @@ _Avoid_: calling it the "current squad" without the appearance-based caveat.
 Recent Summary Metrics for each player in a team's **Recent squad** (v1) — membership from recent **Appearances**, the form numbers from each player's Appearances. One reusable panel, shown on two surfaces: the **Fixture view** (both teams side by side, its primary home) and the **Team hub** (one team, a jump-off into its players). Never an auto-predicted XI. Filtering to confirmed starters is a manual user step once the official lineup is released. When the roster source lands post-v1, membership switches from **Recent squad** to **Squad** with no change to the form numbers.
 
 ### Out of scope
+
+**FIFA Club World Cup**:
+Excluded from `club_european` deliberately (2026-07): squads demonstrably don't take it seriously and the opposition is much weaker, so its rows would be form noise inside a covered club's Rolling Windows — the exclusion is about signal quality, not fetch cost. Same reasoning excludes international friendlies.
 
 **Market**:
 A bookmaker's priced offering — *a thing one would bet on*. Deliberately **not modelled or stored** in this project. The platform surfaces the user's own metrics and hit rates against a self-chosen Threshold; it does not ingest, store, or reason about bookmaker odds.
