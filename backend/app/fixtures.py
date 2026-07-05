@@ -10,6 +10,7 @@ the single-metric Entity view.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
@@ -58,13 +59,14 @@ def _rows_query():
     )
 
 
-def _team_rows(session: Session, team_id: int, n: int):
-    """A team's last-n league games, most-recent-first."""
+def _team_rows(session: Session, team_id: int, n: int, scopes: Sequence[str]):
+    """A team's last-n games within the given competition scopes,
+    most-recent-first."""
     q = (
         _rows_query()
         .where(
             TeamMatch.team_id == team_id,
-            TeamMatch.competition_type == "club_league",
+            TeamMatch.competition_type.in_(scopes),
         )
         .order_by(TeamMatch.date.desc())
         .limit(n)
@@ -144,12 +146,18 @@ def fixture_detail(session: Session, *, fixture_id: int):
 
 
 def fixture_comparison(
-    session: Session, *, home_id: int, away_id: int, n: int = 10
+    session: Session,
+    *,
+    home_id: int,
+    away_id: int,
+    n: int = 10,
+    scopes: Sequence[str] = ("club_league",),
 ) -> dict:
-    """Raw rows for the Fixture view: each team's last-n league games plus both
-    sides of their last-n league meetings."""
+    """Raw rows for the Fixture view: each team's last-n games in the given
+    scopes plus both sides of their last-n meetings (H2H is scope-unfiltered
+    by design — it's a meetings list, not a form window)."""
     return {
-        "home": _team_rows(session, home_id, n),
-        "away": _team_rows(session, away_id, n),
+        "home": _team_rows(session, home_id, n, scopes),
+        "away": _team_rows(session, away_id, n, scopes),
         "h2h": _h2h_rows(session, home_id, away_id, n),
     }

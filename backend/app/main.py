@@ -229,17 +229,26 @@ def fixtures_compare(
     home: int = Query(..., description="home team id"),
     away: int = Query(..., description="away team id"),
     n: int = Query(10, ge=1, le=50),
+    scope: list[str] = Query(
+        ["club_league"], description="competition scopes for the form windows"
+    ),
     session: Session = Depends(get_session),
 ) -> FixtureComparison:
-    """Raw rows for the Fixture view — each team's last-n league games plus both
-    sides of their last-n league meetings. The client aggregates (ADR 0005)."""
+    """Raw rows for the Fixture view — each team's last-n games in the selected
+    scopes plus both sides of their last-n meetings (H2H is always all scopes).
+    The client aggregates (ADR 0005)."""
+    for s in scope:
+        if s not in SCOPES:
+            raise HTTPException(422, f"unknown scope '{s}'. One of {SCOPES}.")
     teams = {}
     for team_id in (home, away):
         team = session.get(Team, team_id)
         if team is None:
             raise HTTPException(404, f"team {team_id} not found")
         teams[team_id] = team.canonical_name
-    blocks = fixture_comparison(session, home_id=home, away_id=away, n=n)
+    blocks = fixture_comparison(
+        session, home_id=home, away_id=away, n=n, scopes=scope
+    )
     return FixtureComparison(
         home_id=home,
         home_name=teams[home],

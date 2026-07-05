@@ -8,6 +8,20 @@ import { LastNInput } from '../components/LastNInput'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
+type Scope = 'league' | 'league_cups' | 'cups'
+
+// competition_type values sent to /fixtures/compare per selector state
+const SCOPE_PARAMS: Record<Scope, string[]> = {
+  league: ['club_league'],
+  league_cups: ['club_league', 'club_cup'],
+  cups: ['club_cup'],
+}
+
+const SCOPE_LABELS: Record<Scope, string> = {
+  league: 'league',
+  league_cups: 'league + cups',
+  cups: 'cups',
+}
 
 interface MetricDef {
   label: string
@@ -55,6 +69,7 @@ export default function FixtureView() {
   const { metrics } = useCatalogue()
   const [mode, setMode] = useState<Mode>('form')
   const [n, setN] = useState(10)
+  const [scope, setScope] = useState<Scope>('league')
   const [venueHome, setVenueHome] = useState<Venue>('home')
   const [venueAway, setVenueAway] = useState<Venue>('away')
   const [h2hVenue, setH2hVenue] = useState<Venue>('recent')
@@ -70,14 +85,14 @@ export default function FixtureView() {
     setLoading(true)
     setError(null)
     api
-      .fixturesCompare(home, away, n)
+      .fixturesCompare(home, away, n, SCOPE_PARAMS[scope])
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(String(e.message ?? e)))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [home, away, n])
+  }, [home, away, n, scope])
 
   // Pair the H2H rows into meetings (host first), most-recent-first.
   const meetings = useMemo(() => {
@@ -129,7 +144,7 @@ export default function FixtureView() {
         {data.home_name} <span className="text-slate-500">vs</span> {data.away_name}
       </h1>
       <p className="mb-4 text-sm text-slate-500">
-        {data.home_name} (home) vs {data.away_name} (away) · form: league ·
+        {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
         H2H: all meetings incl. cups
       </p>
 
@@ -149,6 +164,19 @@ export default function FixtureView() {
         {mode !== 'squad' && (
           <Field label="Last N">
             <LastNInput n={n} setN={setN} max={50} />
+          </Field>
+        )}
+        {mode === 'form' && (
+          <Field label="Competitions">
+            <Toggle
+              value={scope}
+              onChange={(v) => setScope(v as Scope)}
+              options={[
+                ['league', 'League'],
+                ['league_cups', 'League + Cups'],
+                ['cups', 'Cups'],
+              ]}
+            />
           </Field>
         )}
       </div>
@@ -351,6 +379,8 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
 }
 
 function FixtureList({ title, rows }: { title: string; rows: FixtureRow[] }) {
+  // label rows only when the window mixes competitions (cup scopes, relegation seasons)
+  const showComp = new Set(rows.map((r) => r.competition)).size > 1
   return (
     <div>
       <h3 className="mb-2 text-sm text-slate-500">{title}</h3>
@@ -359,7 +389,7 @@ function FixtureList({ title, rows }: { title: string; rows: FixtureRow[] }) {
       ) : (
         <div className="divide-y divide-slate-900">
           {rows.map((r) => (
-            <FixtureRowItem key={r.fixture_id} r={r} />
+            <FixtureRowItem key={r.fixture_id} r={r} showComp={showComp} />
           ))}
         </div>
       )}
@@ -367,7 +397,7 @@ function FixtureList({ title, rows }: { title: string; rows: FixtureRow[] }) {
   )
 }
 
-function FixtureRowItem({ r }: { r: FixtureRow }) {
+function FixtureRowItem({ r, showComp }: { r: FixtureRow; showComp?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <div>
@@ -381,6 +411,9 @@ function FixtureRowItem({ r }: { r: FixtureRow }) {
         </span>
         <span className="w-5 shrink-0 text-xs text-slate-600">{r.is_home ? 'H' : 'A'}</span>
         <span className="flex-1 truncate text-slate-200">{r.opponent}</span>
+        {showComp && (
+          <span className="max-w-28 shrink-0 truncate text-xs text-slate-600">{r.competition}</span>
+        )}
         <span className="font-medium text-slate-100">{r.gf}–{r.ga}</span>
       </button>
       {open && <DrillDown fixtureId={r.fixture_id} />}

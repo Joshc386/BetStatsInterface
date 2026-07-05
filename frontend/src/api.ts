@@ -212,10 +212,11 @@ export const api = {
       `/${entity === 'team' ? 'teams' : 'players'}/${id}/summary?${sp}`,
     )
   },
-  fixturesCompare: (home: number, away: number, n: number) =>
-    getJSON<FixtureComparison>(
-      `/fixtures/compare?home=${home}&away=${away}&n=${n}`,
-    ),
+  fixturesCompare: (home: number, away: number, n: number, scopes: string[]) => {
+    const sp = new URLSearchParams({ home: String(home), away: String(away), n: String(n) })
+    scopes.forEach((s) => sp.append('scope', s)) // form-window scopes; H2H is always all scopes
+    return getJSON<FixtureComparison>(`/fixtures/compare?${sp}`)
+  },
   fixtureDetail: (fixtureId: number) =>
     getJSON<FixtureRow[]>(`/fixtures/${fixtureId}`),
   fixturesUpcoming: (days = 14) =>

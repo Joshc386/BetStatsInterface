@@ -71,6 +71,75 @@ def test_away_block_is_the_other_teams_last_n_league_games():
         s.close()
 
 
+def test_team_block_widens_to_cup_scope_when_requested():
+    """With scopes=(league, cup) the form window is the last-n games across
+    BOTH scopes — cup ties enter the window and displace older league games."""
+    s = SessionLocal()
+    try:
+        # a team guaranteed to have cup rows
+        team = s.scalar(
+            select(TeamMatch.team_id)
+            .where(TeamMatch.competition_type == "club_cup")
+            .limit(1)
+        )
+        opp = s.scalar(
+            select(TeamMatch.opponent_id).where(TeamMatch.team_id == team).limit(1)
+        )
+        scopes = ("club_league", "club_cup")
+        res = fixture_comparison(s, home_id=team, away_id=opp, n=50, scopes=scopes)
+
+        direct = s.execute(
+            select(TeamMatch.fixture_id)
+            .where(
+                TeamMatch.team_id == team,
+                TeamMatch.competition_type.in_(scopes),
+            )
+            .order_by(TeamMatch.date.desc())
+            .limit(50)
+        ).all()
+        assert [r.fixture_id for r in res["home"]] == [fid for (fid,) in direct]
+
+        # the widened window actually contains at least one cup tie
+        cup_ids = {
+            fid for (fid,) in s.execute(
+                select(TeamMatch.fixture_id).where(
+                    TeamMatch.team_id == team,
+                    TeamMatch.competition_type == "club_cup",
+                )
+            ).all()
+        }
+        assert cup_ids & {r.fixture_id for r in res["home"]}
+    finally:
+        s.close()
+
+
+def test_team_block_defaults_to_league_only():
+    """No scopes argument -> unchanged league-only behaviour (the API default)."""
+    s = SessionLocal()
+    try:
+        team = s.scalar(
+            select(TeamMatch.team_id)
+            .where(TeamMatch.competition_type == "club_cup")
+            .limit(1)
+        )
+        opp = s.scalar(
+            select(TeamMatch.opponent_id).where(TeamMatch.team_id == team).limit(1)
+        )
+        res = fixture_comparison(s, home_id=team, away_id=opp, n=50)
+        types = {
+            s.execute(
+                select(TeamMatch.competition_type).where(
+                    TeamMatch.fixture_id == r.fixture_id,
+                    TeamMatch.team_id == team,
+                )
+            ).scalar_one()
+            for r in res["home"]
+        }
+        assert types == {"club_league"}
+    finally:
+        s.close()
+
+
 def test_h2h_block_is_both_sides_of_the_last_n_meetings():
     s = SessionLocal()
     try:
