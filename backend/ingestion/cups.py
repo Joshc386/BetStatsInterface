@@ -84,7 +84,7 @@ CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset()
 # on "wimbledon", not "afc").
 GENERIC_NAME_TOKENS = frozenset(
     "fc afc ac as cf sc sk fk sl ss rb cd rc sd us st 1 real sporting "
-    "dinamo dynamo red inter".split()
+    "dinamo dynamo red inter aek".split()
 )
 
 

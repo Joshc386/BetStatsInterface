@@ -128,6 +128,21 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # EFL Cup 2023-24 draw.
     "Colchester United": "Colchester",  # player-df (existing canonical)
     "Northampton Town": "Northampton",  # player-df (existing canonical)
+    # European opponents (ADR 0011) — the same two-spelling trap at continental
+    # scale: the FBref schedule spells foreign clubs SHORT (which auto-creates
+    # the canonical row) while the per-match player df spells them in FULL, so
+    # without the alias the tie fail-loud skips AND rolls back the created team.
+    # Schedule spellings verified against every cached EUR schedule 2021-2526;
+    # they are consistent across seasons. Found by the 6-season European chain
+    # (2026-07-06).
+    "Red Bull Salzburg": "RB Salzburg",  # player-df -> schedule spelling
+    "Eintracht Frankfurt": "Frankfurt",
+    "Internazionale": "Inter",
+    "PSV Eindhoven": "PSV",
+    "Paris Saint-Germain": "PSG",
+    "İstanbul Başakşehir": "Başakşehir",
+    "Mönchengladbach": "Gladbach",
+    "Ludogorets Razgrad": "Ludogorets",
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

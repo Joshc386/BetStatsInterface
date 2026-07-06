@@ -491,6 +491,9 @@ def test_guard_token_skips_generic_prefixes():
     assert _guard_token("Real Sociedad") == "sociedad"
     assert _guard_token("AFC Wimbledon") == "wimbledon"
     assert _guard_token("1. FC Köln") == "köln"
+    # acronym clubs: AEK Athens and AEK Larnaca are distinct (first live trip)
+    assert _guard_token("AEK Athens") == "athens"
+    assert _guard_token("AEK Larnaca") == "larnaca"
     # the original duplicate signature still collides
     assert _guard_token("Bradford City") == _guard_token("Bradford")
     # an all-generic name degrades to its first token, never crashes
