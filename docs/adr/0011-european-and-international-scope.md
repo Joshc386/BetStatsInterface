@@ -51,6 +51,19 @@ now and re-scoped when picked back up.**
   user-run chains) — the largest single backfill on the books, which is why it follows
   Europe, not precedes it.
 
+## Update — European ingestion landed (2026-07-06)
+
+The three league-format competitions backfilled in full on the first live day:
+**502 fixtures (every covered tie, 2020-21 → 2025-26), 15,292 player rows,
+1,002 team rows (94% with corners)**. Two failure shapes surfaced and were
+fixed in-flight (commit `533350f` + follow-up): shared acronyms ("AEK") joined
+the guard's generic tokens, and ten foreign clubs needed two-spelling aliases
+(schedule SHORT vs player-df FULL). **The UEFA Super Cup is deferred**: its
+single-match FBref schedule page has no date column and soccerdata's
+`read_schedule` crashes on it upstream — patching a vendored parser for the 3
+covered matches (Spurs 2526, City 2324, Chelsea 2122) fails the boring-path
+test. Revisit only if those matches are ever missed; they can be hand-seeded.
+
 ## Considered options
 
 - **Whole European competitions (PSG vs Bayern in scope)** — rejected: a different

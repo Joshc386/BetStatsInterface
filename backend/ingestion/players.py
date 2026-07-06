@@ -143,6 +143,9 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "İstanbul Başakşehir": "Başakşehir",
     "Mönchengladbach": "Gladbach",
     "Ludogorets Razgrad": "Ludogorets",
+    # surfaced by the sweep pass (2526/2425 seasons ran pre-monitoring)
+    "Shakhtar Donetsk": "Shakhtar D.",
+    "Shamrock Rovers": "Shamrock",
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

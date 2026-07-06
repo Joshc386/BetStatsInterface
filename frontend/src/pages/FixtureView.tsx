@@ -8,19 +8,23 @@ import { LastNInput } from '../components/LastNInput'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
-type Scope = 'league' | 'league_cups' | 'cups'
+type Scope = 'league' | 'league_cups' | 'all' | 'cups' | 'europe'
 
 // competition_type values sent to /fixtures/compare per selector state
 const SCOPE_PARAMS: Record<Scope, string[]> = {
   league: ['club_league'],
   league_cups: ['club_league', 'club_cup'],
+  all: ['club_league', 'club_cup', 'club_european'],
   cups: ['club_cup'],
+  europe: ['club_european'],
 }
 
 const SCOPE_LABELS: Record<Scope, string> = {
   league: 'league',
   league_cups: 'league + cups',
+  all: 'all competitions',
   cups: 'cups',
+  europe: 'Europe',
 }
 
 interface MetricDef {
@@ -174,7 +178,9 @@ export default function FixtureView() {
               options={[
                 ['league', 'League'],
                 ['league_cups', 'League + Cups'],
+                ['all', 'All comps'],
                 ['cups', 'Cups'],
+                ['europe', 'Europe'],
               ]}
             />
           </Field>
