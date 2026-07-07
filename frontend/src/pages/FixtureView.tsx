@@ -149,7 +149,7 @@ export default function FixtureView() {
       </h1>
       <p className="mb-4 text-sm text-slate-500">
         {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
-        H2H: all meetings incl. cups
+        H2H: all meetings, every competition
       </p>
 
       {/* Mode + window */}
@@ -239,7 +239,7 @@ function FormMode({
   return (
     <>
       {/* Per-team venue toggles */}
-      <div className="mb-4 grid grid-cols-2 gap-4">
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <VenuePanel name={data.home_name} value={venueHome} onChange={setVenueHome} count={homeRows.length} />
         <VenuePanel name={data.away_name} value={venueAway} onChange={setVenueAway} count={awayRows.length} />
       </div>
@@ -265,12 +265,23 @@ function FormMode({
       </table>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <FixtureList title={`${data.home_name} — recent`} rows={homeRows} />
-        <FixtureList title={`${data.away_name} — recent`} rows={awayRows} />
+        <FixtureList
+          title={`${data.home_name} — ${venueTitle(venueHome)}`}
+          rows={homeRows}
+          scopeEmpty={data.home.length === 0}
+        />
+        <FixtureList
+          title={`${data.away_name} — ${venueTitle(venueAway)}`}
+          rows={awayRows}
+          scopeEmpty={data.away.length === 0}
+        />
       </div>
     </>
   )
 }
+
+const venueTitle = (v: Venue) =>
+  v === 'home' ? 'home games' : v === 'away' ? 'away games' : 'recent'
 
 function H2HMode({
   data,
@@ -384,14 +395,33 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
   )
 }
 
-function FixtureList({ title, rows }: { title: string; rows: FixtureRow[] }) {
+function FixtureList({
+  title,
+  rows,
+  scopeEmpty,
+}: {
+  title: string
+  rows: FixtureRow[]
+  scopeEmpty?: boolean
+}) {
   // label rows only when the window mixes competitions (cup scopes, relegation seasons)
   const showComp = new Set(rows.map((r) => r.competition)).size > 1
+  // a sparse-coverage window can reach back years — say so rather than imply recent form
+  const seasonSpan = new Set(rows.map((r) => r.season)).size
   return (
     <div>
-      <h3 className="mb-2 text-sm text-slate-500">{title}</h3>
+      <h3 className="mb-2 text-sm text-slate-500">
+        {title}
+        {seasonSpan > 1 && (
+          <span className="ml-2 text-xs text-slate-600">spans {seasonSpan} seasons</span>
+        )}
+      </h3>
       {rows.length === 0 ? (
-        <p className="text-slate-600">No games in this venue filter.</p>
+        <p className="text-slate-600">
+          {scopeEmpty
+            ? 'No games in this competition scope.'
+            : 'No games in this venue filter.'}
+        </p>
       ) : (
         <div className="divide-y divide-slate-900">
           {rows.map((r) => (

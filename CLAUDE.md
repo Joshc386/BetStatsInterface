@@ -131,8 +131,28 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.points_adjustments          # dry-run: print found deductions
 .venv/Scripts/python.exe -m ingestion.points_adjustments --apply  # upsert (idempotent; re-run for new rulings)
 
-# ingestion  (TODO — Phase 5)
-# nightly incremental / roster refresh
+# nightly incremental (Phase 5 — TWO TIERS; incremental by design, never full-season)
+#
+# TIER 1 — UNATTENDED (team data + points): safe headless, no Cloudflare/rate limit.
+.venv/Scripts/python.exe -m ingestion.nightly     # current-season fd.co.uk team data + ESPN points
+# AUTOMATE like upcoming: Task Scheduler task running backend/run_nightly.cmd
+# (StartWhenAvailable) -> backend/logs/nightly.log. Idempotent; catch-up-safe.
+#
+# TIER 2 — SUPERVISED (FBref player data): headful, VPN OFF, machine awake, watchdog.
+.venv/Scripts/python.exe -m ingestion.matchday                       # current-season PL+Champ w/ pending work (default)
+.venv/Scripts/python.exe -m ingestion.matchday "FA Cup" "Champions League"  # a cup/European round, explicit
+# (or run_matchday.cmd — sets PYTHONIOENCODING=utf-8 for foreign names). Wraps
+# run_backfill per comp, builds cup/European team rows (zero-network), then sweeps
+# uc_driver.exe orphans a clean exit leaks. UEFA Super Cup excluded (deferred).
+#
+# SEASON ROLLOVER (do BEFORE the first 2627 match day):
+#   1. Seed any newly-promoted ex-National-League club (upcoming.py fails loud on
+#      unknown ESPN names — see the upcoming note above).
+#   2. Run tier 1 once so 2627 PL/Championship team_match exists — this is what
+#      makes cups.covered_team_ids("2627") resolve the new promoted/relegated set
+#      (it is season-driven, not hardcoded) before any cup tie is filtered.
+#   3. New foreign clubs in Europe trip the fail-loud alias guard by design:
+#      add the alias + re-run, not a bug (see memory cups-internationals-sourcing).
 ```
 
 ---
