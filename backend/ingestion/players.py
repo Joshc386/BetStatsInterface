@@ -146,6 +146,10 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # surfaced by the sweep pass (2526/2425 seasons ran pre-monitoring)
     "Shakhtar Donetsk": "Shakhtar D.",
     "Shamrock Rovers": "Shamrock",
+    # International nations (ADR 0011) — the same trap: schedule spells SHORT
+    # (auto-creates the row), player df spells FULL. Found by the finals+NL
+    # chain (2026-07-07).
+    "North Macedonia": "N. Macedonia",  # player-df -> schedule spelling (Euro 2020)
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

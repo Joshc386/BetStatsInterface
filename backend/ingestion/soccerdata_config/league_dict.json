@@ -44,5 +44,64 @@
         "FBref": "UEFA Super Cup",
         "season_start": "Aug",
         "season_end": "Aug"
+    },
+    "INT-Copa America": {
+        "FBref": "CONMEBOL Copa América",
+        "season_code": "single-year"
+    },
+    "INT-Nations League": {
+        "FBref": "UEFA Nations League"
+    },
+    "INT-Euros Qualifying": {
+        "FBref": "UEFA European Football Championship Qualifying",
+        "season_code": "single-year"
+    },
+    "INT-Africa Cup of Nations": {
+        "FBref": "Africa Cup of Nations",
+        "season_code": "single-year"
+    },
+    "INT-Africa Cup of Nations Qualification": {
+        "FBref": "Africa Cup of Nations qualification",
+        "season_code": "single-year"
+    },
+    "INT-Asian Cup": {
+        "FBref": "AFC Asian Cup",
+        "season_code": "single-year"
+    },
+    "INT-Asian Cup Qualification": {
+        "FBref": "AFC Asian Cup qualification",
+        "season_code": "single-year"
+    },
+    "INT-Gold Cup": {
+        "FBref": "CONCACAF Gold Cup",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification CAF": {
+        "FBref": "FIFA World Cup Qualification — CAF",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification CONCACAF": {
+        "FBref": "FIFA World Cup Qualification — CONCACAF",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification CONMEBOL": {
+        "FBref": "FIFA World Cup Qualification — CONMEBOL",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification OFC": {
+        "FBref": "FIFA World Cup Qualification — OFC",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification UEFA": {
+        "FBref": "FIFA World Cup Qualification — UEFA",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification AFC": {
+        "FBref": "FIFA World Cup Qualification — AFC",
+        "season_code": "single-year"
+    },
+    "INT-World Cup Qualification Play-offs": {
+        "FBref": "FIFA World Cup Qualification — Inter-confederation play-offs",
+        "season_code": "single-year"
     }
 }

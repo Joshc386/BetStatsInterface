@@ -127,6 +127,15 @@ python -m venv .venv
 # fails loud on unknown ESPN names: extend ESPN_TEAM_ALIASES; a NEWLY PROMOTED
 # (ex-National-League) club must be seeded deliberately first — summer-prep step
 
+# internationals (ADR 0011 — finals + Nations League; whole-competition, NO covered filter)
+# Arg 1 is the soccerdata FETCH EDITION ("2022" WC; "2223" NL two-year code), NOT the
+# stored season — that is derived per MATCH DATE, AUGUST boundary (Euro 2024 -> '2324').
+# QUALIFIERS DEFERRED: soccerdata read_seasons crashes on FBref qualifier history pages
+# (no table#seasons); parser shim pending. Nation spelling trips the fail-loud resolver
+# by design: add FBREF_TEAM_ALIASES (player-df -> schedule spelling) + re-run.
+.venv/Scripts/python.exe -m ingestion.run_backfill 2022 "World Cup"    # player pass (VPN OFF, watchdog)
+.venv/Scripts/python.exe -m ingestion.internationals team "World Cup"  # team rows (zero-network, loops stored seasons)
+
 # points deductions (ADR 0010 — ESPN standings; feeds the computed GET /table)
 .venv/Scripts/python.exe -m ingestion.points_adjustments          # dry-run: print found deductions
 .venv/Scripts/python.exe -m ingestion.points_adjustments --apply  # upsert (idempotent; re-run for new rulings)

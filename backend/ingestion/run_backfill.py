@@ -33,6 +33,7 @@ from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch
 from app.models.reference import Competition
 from ingestion.cups import LEAGUE_IDS as CUP_LEAGUE_IDS
+from ingestion.internationals import LEAGUE_IDS as INTL_LEAGUE_IDS
 
 STALL = 240  # seconds of log silence => assume the session hung (normal match ~15s)
 POLL = 15
@@ -102,7 +103,17 @@ def run(season: str = "2526", competition_name: str = "Premier League") -> int:
     print("[watchdog] system idle-sleep blocked for the run", flush=True)
     try:
         if competition_name in CUP_LEAGUE_IDS:
-            return _run_cup(season, competition_name)
+            return _run_schedule_driven(
+                season, competition_name, "ingestion.cups", _cup_ingested, "cup"
+            )
+        if competition_name in INTL_LEAGUE_IDS:
+            # internationals are schedule-driven like cups; `season` here is the
+            # soccerdata fetch-edition code, and progress is counted per
+            # competition (the stored season is date-derived, so not the edition).
+            return _run_schedule_driven(
+                season, competition_name, "ingestion.internationals",
+                lambda _s, c: _intl_ingested(c), "international",
+            )
         return _run(season, competition_name)
     finally:
         _set_sleep_blocked(False)
@@ -136,28 +147,58 @@ def _cup_ingested(season: str, competition_name: str) -> int:
         )
 
 
-def _run_cup(season: str, competition_name: str) -> int:
-    """Supervise the cup backfill (ingestion.cups).
+def _intl_ingested(competition_name: str) -> int:
+    """International fixtures for this competition that already carry player rows.
 
-    Cups have no bounded pending set up front — the cup backfill reads the
-    schedule, ingests every covered tie in one resumable pass, and exits. So the
-    watchdog's job is only stall-recovery: a clean exit means done; a stall means
-    kill + restart (cups._already_ingested makes the next pass skip finished ties
-    with no network cost). A fresh session also re-solves Cloudflare.
+    Season-agnostic (unlike ``_cup_ingested``): an international edition's stored
+    season is date-derived, so progress is tracked per competition. Used only for
+    logging + no-progress detection across restarts.
     """
-    done = _cup_ingested(season, competition_name)
-    print(f"[watchdog] {competition_name} {season}: {done} cup fixtures already "
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == competition_name)
+        )
+        rows = session.execute(
+            select(Fixture.id).where(Fixture.competition_id == comp.id)
+        ).all()
+        return sum(
+            1
+            for (fixture_id,) in rows
+            if session.scalar(
+                select(PlayerMatch.id)
+                .where(PlayerMatch.fixture_id == fixture_id)
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def _run_schedule_driven(
+    season: str, competition_name: str, module: str, count_fn, kind: str
+) -> int:
+    """Supervise a schedule-driven backfill (cups / European / internationals).
+
+    These have no bounded pending set up front — the backfill reads the schedule,
+    ingests every in-scope game in one resumable pass, and exits. So the watchdog's
+    job is only stall-recovery: a clean exit means done; a stall means kill +
+    restart (``_already_ingested`` makes the next pass skip finished games with no
+    network cost). A fresh session also re-solves Cloudflare. ``count_fn(season,
+    competition)`` returns progress (ingested-so-far) for logging + no-progress
+    detection; ``module`` is the ingestion entry point run as a subprocess.
+    """
+    done = count_fn(season, competition_name)
+    print(f"[watchdog] {competition_name} {season}: {done} {kind} fixtures already "
           f"ingested at start", flush=True)
 
     for attempt in range(1, MAX_RESTARTS + 1):
-        print(f"[watchdog] cup start attempt {attempt}/{MAX_RESTARTS} -> {_LOG}",
+        print(f"[watchdog] {kind} start attempt {attempt}/{MAX_RESTARTS} -> {_LOG}",
               flush=True)
         with open(_LOG, "a", encoding="utf-8") as log:
-            log.write(f"\n===== watchdog cup attempt {attempt}: "
+            log.write(f"\n===== watchdog {kind} attempt {attempt}: "
                       f"{competition_name} {season} =====\n")
             log.flush()
             proc = subprocess.Popen(
-                [_PY, "-u", "-m", "ingestion.cups", season, competition_name],
+                [_PY, "-u", "-m", module, season, competition_name],
                 stdout=log, stderr=subprocess.STDOUT,
             )
 
@@ -173,17 +214,17 @@ def _run_cup(season: str, competition_name: str) -> int:
                 stalled = True
                 break
         if not stalled:
-            print(f"[watchdog] cup backfill exited (code {proc.returncode}) — done",
+            print(f"[watchdog] {kind} backfill exited (code {proc.returncode}) — done",
                   flush=True)
             return proc.returncode
 
         time.sleep(3)
-        new_done = _cup_ingested(season, competition_name)
-        print(f"[watchdog] progress: {new_done} cup fixtures ingested "
+        new_done = count_fn(season, competition_name)
+        print(f"[watchdog] progress: {new_done} {kind} fixtures ingested "
               f"(was {done})", flush=True)
         done = new_done
 
-    print(f"[watchdog] hit MAX_RESTARTS with {done} cup fixtures ingested — "
+    print(f"[watchdog] hit MAX_RESTARTS with {done} {kind} fixtures ingested — "
           "investigate backfill.log", flush=True)
     return 1
 
