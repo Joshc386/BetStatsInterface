@@ -44,6 +44,7 @@ const PLAYER_METRICS: Record<string, MetricDef> = {
 const SCOPES: Array<[string, string]> = [
   ['club_league', 'League'],
   ['club_cup', 'Cups'],
+  ['club_european', 'Europe'],
   ['international', 'International'],
   ['all', 'All'],
 ]

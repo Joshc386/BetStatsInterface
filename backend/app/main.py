@@ -94,8 +94,16 @@ def seasons(session: Session = Depends(get_session)) -> dict:
 
 @app.get("/competitions", response_model=list[CompetitionOut])
 def competitions(session: Session = Depends(get_session)) -> list[CompetitionOut]:
+    """Competitions that actually hold ingested rows — seeded-but-empty ones
+    (e.g. the deferred UEFA Super Cup) stay out of the UI until data lands."""
+    has_rows = (
+        select(TeamMatch.competition_id)
+        .where(TeamMatch.competition_id == Competition.id)
+        .exists()
+    )
     rows = session.execute(
         select(Competition.id, Competition.name, Competition.type, Competition.tier)
+        .where(has_rows)
         .order_by(Competition.tier, Competition.name)
     ).all()
     return [CompetitionOut(id=i, name=n, type=t, tier=tier) for i, n, t, tier in rows]
