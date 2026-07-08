@@ -150,6 +150,13 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # (auto-creates the row), player df spells FULL. Found by the finals+NL
     # chain (2026-07-07).
     "North Macedonia": "N. Macedonia",  # player-df -> schedule spelling (Euro 2020)
+    "Equatorial Guinea": "Equ. Guinea",  # player-df -> schedule spelling (AFCON)
+    "United Arab Emirates": "UAE",  # player-df -> schedule spelling (Asian Cup)
+    "Dominican Republic": "Dominican Rep.",  # player-df -> schedule spelling (Gold Cup)
+    "Trinidad and Tobago": "Trin & Tobago",  # player-df -> schedule spelling (Gold Cup)
+    "St. Kitts and Nevis": "St. Kitts & Nevis",  # player-df -> schedule spelling (Gold Cup)
+    "Republic of Ireland": "Rep. of Ireland",  # player-df -> schedule spelling (Nations League)
+    "Bosnia and Herzegovina": "Bosnia–Herz",  # player-df -> schedule spelling (NL; en-dash)
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

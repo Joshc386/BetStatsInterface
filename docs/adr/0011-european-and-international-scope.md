@@ -64,6 +64,33 @@ single-match FBref schedule page has no date column and soccerdata's
 covered matches (Spurs 2526, City 2324, Chelsea 2122) fails the boring-path
 test. Revisit only if those matches are ever missed; they can be hand-seeded.
 
+## Update — international finals + Nations League landed (2026-07-08)
+
+The seven league-format/tournament competitions backfilled in full in one chain
+day (+ a cached recovery pass): **1,052 fixtures = every match of every covered
+edition 2020-21 → 2025-26, 32,138 player rows, 2,086 team rows (100% corners on
+played matches)** — World Cup 2022, Euros 2020/2024, Copa América 2021/2024,
+AFCON 2021/2023/2025, Asian Cup 2023, Gold Cup 2021/2023/2025, Nations League
+×3. The stored season derives from each match date (August boundary), so summer
+tournaments sit whole in the season just ended and straddling NL editions split
+across two stored seasons by design. International match pages use FBref's
+condensed format (`summary` carries all our metrics inline), so the cup ingest
+path worked unchanged. Eight nations needed two-spelling aliases (schedule
+SHORT vs player-df FULL: N. Macedonia, Equ. Guinea, UAE, Dominican Rep.,
+Trin & Tobago, St. Kitts & Nevis, Rep. of Ireland, Bosnia–Herz). **Nine honest
+gaps, all real-world anomalies:** two COVID-cancelled awarded games (Nov 2020),
+six unplayed fixtures from Russia's 2022 suspension (empty fixtures, no rows),
+and the abandoned Romania–Kosovo (Nov 2024; player rows, no team rows — no
+final scorebox).
+
+**The qualifiers remain deferred**: FBref renders qualifier *history* pages
+without the `table#seasons` element soccerdata's `read_seasons` requires, so
+every qualifying competition (WC quals ×7 confederations + play-offs, Euro/
+AFCON/Asian qualifying) crashes upstream at season resolution. The season links
+are present in the page, so a small vendored `read_seasons` shim is feasible —
+proof-of-concept agreed as the follow-up (2026-07-07) before the qualifier
+backfill (the larger half of the ~3,500–4,500 estimate) is attempted.
+
 ## Considered options
 
 - **Whole European competitions (PSG vs Bayern in scope)** — rejected: a different
