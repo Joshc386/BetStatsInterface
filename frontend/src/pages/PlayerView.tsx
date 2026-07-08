@@ -19,6 +19,7 @@ const seasonFmt = (s: string) => (s.length === 4 ? `20${s.slice(0, 2)}-${s.slice
 const SCOPES: Array<[string, string]> = [
   ['club_league', 'League'],
   ['club_cup', 'Cups'],
+  ['club_european', 'Europe'],
   ['international', 'International'],
   ['all', 'All'],
 ]
@@ -263,8 +264,10 @@ export default function PlayerView() {
           ) : (
             <>
               <div className="mb-2 flex flex-wrap gap-3">
-                <Stat label="Apps" value={String(summary.games)} />
-                <Stat label="Total" value={fmt(summary.total)} />
+                <Stat label="Appearances" value={String(summary.games)} />
+                {/* the METRIC total over the window (not starts — starts aren't
+                    ingested); named after the metric so it can't be misread */}
+                <Stat label={`Total ${label(metric).toLowerCase()}`} value={fmt(summary.total)} />
                 <Stat label="Per app" value={fmt(summary.per_appearance)} />
                 <Stat label="Per 90" value={fmt(summary.per_90)} />
                 <Stat label="Minutes" value={fmt(summary.minutes_total, 0)} />
