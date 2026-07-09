@@ -39,11 +39,8 @@ COMPETITIONS = [
     ("UEFA Super Cup", "club_european", None, None, None, "UEFA Super Cup"),
     # International competitions (ADR 0011): whole-competition (no covered-tie
     # filter), FBref-sourced, player data + zero-network team rows. country=None
-    # (multi-nation tournaments, like the UEFA comps). Qualifiers are in ADR 0011
-    # scope but BLOCKED by a soccerdata read_seasons limitation (no table#seasons
-    # on FBref qualifier history pages) — deferred pending a parser shim, so only
-    # the finals + Nations League are seeded here. fbref_key is the exact FBref
-    # comps-index name.
+    # (multi-nation tournaments, like the UEFA comps). fbref_key is the exact
+    # FBref comps-index name.
     ("World Cup", "international", None, None, None, "FIFA World Cup"),
     ("Euros", "international", None, None, None, "UEFA European Football Championship"),
     # ASCII display name (batch-arg-safe on Windows); accented form stays the
@@ -53,6 +50,15 @@ COMPETITIONS = [
     ("Asian Cup", "international", None, None, None, "AFC Asian Cup"),
     ("Gold Cup", "international", None, None, None, "CONCACAF Gold Cup"),
     ("Nations League", "international", None, None, None, "UEFA Nations League"),
+    # Qualifiers (ADR 0011 update 2026-07-09, via ingestion.fbref_shim). ONE
+    # "World Cup Qualifiers" competition for all confederations + the
+    # inter-confederation play-offs (8 FBref pages -> fbref_key=None, the
+    # play-offs precedent); the other qualifying campaigns are 1:1. Dual-badged
+    # AFC matches land here, not under Asian Cup Qualifying (CONTEXT.md).
+    ("World Cup Qualifiers", "international", None, None, None, None),
+    ("Euros Qualifying", "international", None, None, None, "UEFA Euro qualification"),
+    ("AFCON Qualifying", "international", None, None, None, "Africa Cup of Nations qualification"),
+    ("Asian Cup Qualifying", "international", None, None, None, "AFC Asian Cup qualification"),
 ]
 
 

@@ -87,9 +87,47 @@ def test_select_all_games_blank_round_becomes_empty_stage():
     assert game["stage"] == ""
 
 
+def test_select_all_games_skips_matches_before_ingest_floor():
+    """A qualifying campaign straddling the six-season boundary is held
+    partially: matches before INGEST_FLOOR (2020-08-01) never reach the fetch
+    list — the dates rule made mechanical (ADR 0011 update 2026-07-09)."""
+    df = pd.DataFrame(
+        [
+            # Euro-2020-qualifying shape: bulk of the campaign in 2019…
+            {"home_team": "England", "away_team": "Kosovo",
+             "game_id": "out1111a", "date": "2019-09-10", "round": "Group stage"},
+            # …exactly at the boundary (kept: floor is inclusive)
+            {"home_team": "Wales", "away_team": "Finland",
+             "game_id": "edge2222", "date": "2020-08-01", "round": "Group stage"},
+            # play-offs a year later (kept)
+            {"home_team": "Serbia", "away_team": "Scotland",
+             "game_id": "keep3333", "date": "2020-11-12", "round": "Play-offs"},
+        ]
+    )
+    games = select_all_games(df)
+    assert {g["game_id"] for g in games} == {"edge2222", "keep3333"}
+
+
+def test_league_ids_maps_all_wc_qualifying_to_one_competition():
+    """Every WC qualifying selector — all confederations + the inter-confed
+    play-offs — stores under the single 'World Cup Qualifiers' competition
+    (region is self-evident from the nations); other selectors are 1:1, and no
+    two selectors share a soccerdata league key."""
+    wcq = {sel: comp for sel, (comp, _lg) in LEAGUE_IDS.items()
+           if sel.startswith("WC Qual")}
+    assert len(wcq) == 7  # 6 confederations + play-offs
+    assert set(wcq.values()) == {"World Cup Qualifiers"}
+    for sel, (comp, _lg) in LEAGUE_IDS.items():
+        if not sel.startswith("WC Qual"):
+            assert comp == sel, sel  # 1:1 everywhere else
+    leagues = [lg for (_c, lg) in LEAGUE_IDS.values()]
+    assert len(leagues) == len(set(leagues))
+
+
 def test_seeded_international_competitions_present():
-    """seed_competitions is idempotent and seeds the 7 finals+NL competitions as
-    type 'international' with country NULL; every LEAGUE_IDS name is one of them."""
+    """seed_competitions is idempotent and seeds every international competition
+    LEAGUE_IDS can store into — 7 finals+NL plus the 4 qualifying competitions —
+    as type 'international' with country NULL."""
     seed_competitions()
     with SessionLocal() as session:
         rows = {
@@ -98,7 +136,9 @@ def test_seeded_international_competitions_present():
                 select(Competition).where(Competition.type == "international")
             )
         }
-    for name in LEAGUE_IDS:
+    comp_names = {comp for (comp, _lg) in LEAGUE_IDS.values()}
+    assert len(comp_names) == 11
+    for name in comp_names:
         assert name in rows, name
         assert rows[name].country is None
         assert rows[name].type == "international"

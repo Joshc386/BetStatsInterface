@@ -147,13 +147,17 @@ def _cup_ingested(season: str, competition_name: str) -> int:
         )
 
 
-def _intl_ingested(competition_name: str) -> int:
+def _intl_ingested(selector: str) -> int:
     """International fixtures for this competition that already carry player rows.
 
-    Season-agnostic (unlike ``_cup_ingested``): an international edition's stored
-    season is date-derived, so progress is tracked per competition. Used only for
-    logging + no-progress detection across restarts.
+    ``selector`` is the internationals CLI key, which for WC qualifying is not
+    the stored competition name (all confederations feed "World Cup Qualifiers")
+    — resolve through LEAGUE_IDS. Season-agnostic (unlike ``_cup_ingested``): an
+    international edition's stored season is date-derived, so progress is
+    tracked per competition. Used only for logging + no-progress detection
+    across restarts.
     """
+    competition_name = INTL_LEAGUE_IDS[selector][0]
     with SessionLocal() as session:
         comp = session.scalar(
             select(Competition).where(Competition.name == competition_name)

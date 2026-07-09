@@ -16,9 +16,14 @@ foreign clubs in Europe; spelling drift between the schedule and the player-df
 trips the fail-loud resolver in ``ingest_match`` → add an ``FBREF_TEAM_ALIASES``
 entry + re-run (expected at foreign-name volume, ADR 0011).
 
-Qualifiers are ADR-0011-scoped but BLOCKED upstream (soccerdata 1.9.0's
-``read_seasons`` finds no ``table#seasons`` on FBref qualifier history pages) —
-deferred pending a parser shim (memory: cups-internationals-sourcing).
+Qualifiers ride the same path via ``ingestion.fbref_shim.FBref`` (FBref renders
+qualifier history pages without the ``table#seasons`` soccerdata requires; the
+shim mines the per-edition headings instead). All World Cup qualifying leagues
+— every confederation + the inter-confederation play-offs — store under ONE
+"World Cup Qualifiers" competition (the region is self-evident from the
+nations); other qualifying campaigns are their own competitions. Matches dated
+before ``INGEST_FLOOR`` (the six-season window start) are skipped at ingest: a
+straddling campaign is held partially by design (ADR 0011 update 2026-07-09).
 
 Live fetches: VPN OFF, headful, under the watchdog (``ingestion.run_backfill``);
 one-shot fetches hang on Cloudflare.
@@ -50,18 +55,37 @@ from ingestion.players import (
     parse_team_ids,
 )
 
-# competition name -> soccerdata league key. Tournament finals + the Nations
-# League only; qualifiers are deferred (blocked upstream). Nations League uses a
-# two-year edition code ("2223"), the tournaments a single year ("2022").
-LEAGUE_IDS = {
-    "World Cup": "INT-World Cup",
-    "Euros": "INT-European Championship",
-    "Copa America": "INT-Copa America",
-    "AFCON": "INT-Africa Cup of Nations",
-    "Asian Cup": "INT-Asian Cup",
-    "Gold Cup": "INT-Gold Cup",
-    "Nations League": "INT-Nations League",
+# CLI selector -> (Competition row name, soccerdata league key). Several
+# selectors can feed ONE competition: all WC qualifying confederations + the
+# inter-confederation play-offs land under "World Cup Qualifiers". Nations
+# League uses a two-year edition code ("2223"), everything else a single year
+# ("2022") — and note soccerdata's single-year quirk parse("2021")→"2020", so
+# Euro-2020 qualifying (FBref label "2021") answers to edition "2020" or "2021".
+LEAGUE_IDS: dict[str, tuple[str, str]] = {
+    # tournament finals + Nations League (competition == selector)
+    "World Cup": ("World Cup", "INT-World Cup"),
+    "Euros": ("Euros", "INT-European Championship"),
+    "Copa America": ("Copa America", "INT-Copa America"),
+    "AFCON": ("AFCON", "INT-Africa Cup of Nations"),
+    "Asian Cup": ("Asian Cup", "INT-Asian Cup"),
+    "Gold Cup": ("Gold Cup", "INT-Gold Cup"),
+    "Nations League": ("Nations League", "INT-Nations League"),
+    # qualifiers (ADR 0011 update 2026-07-09) — read through the fbref_shim
+    "WC Qual UEFA": ("World Cup Qualifiers", "INT-World Cup Qualification UEFA"),
+    "WC Qual CAF": ("World Cup Qualifiers", "INT-World Cup Qualification CAF"),
+    "WC Qual CONCACAF": ("World Cup Qualifiers", "INT-World Cup Qualification CONCACAF"),
+    "WC Qual CONMEBOL": ("World Cup Qualifiers", "INT-World Cup Qualification CONMEBOL"),
+    "WC Qual AFC": ("World Cup Qualifiers", "INT-World Cup Qualification AFC"),
+    "WC Qual OFC": ("World Cup Qualifiers", "INT-World Cup Qualification OFC"),
+    "WC Qual Play-offs": ("World Cup Qualifiers", "INT-World Cup Qualification Play-offs"),
+    "Euros Qualifying": ("Euros Qualifying", "INT-Euros Qualifying"),
+    "AFCON Qualifying": ("AFCON Qualifying", "INT-Africa Cup of Nations Qualification"),
+    "Asian Cup Qualifying": ("Asian Cup Qualifying", "INT-Asian Cup Qualification"),
 }
+
+# Six-season window start: matches before this are skipped at ingest, so a
+# qualifying campaign straddling the boundary is held partially (dates rule).
+INGEST_FLOOR = dt.datetime(2020, 8, 1, tzinfo=dt.timezone.utc)
 
 
 def season_for_date(date: dt.datetime) -> str:
@@ -80,11 +104,14 @@ def season_for_date(date: dt.datetime) -> str:
 def select_all_games(schedule_df: pd.DataFrame) -> list[dict]:
     """Every played match in an international schedule (NO covered-tie filter).
 
-    Rows with no ``game_id`` (unplayed) are dropped. Returns lightweight dicts —
-    the schedule carries names + game_id only, so each nation's id is recovered
-    from the match page at ingest (as in the cup path). The stored ``season`` is
-    derived per-game from the match date; ``stage`` (the schedule round) joins the
-    fixture natural key so a round-robin's two orientations never collide.
+    Rows with no ``game_id`` (unplayed) are dropped, as are matches dated before
+    ``INGEST_FLOOR`` — schedule rows are free, but each ingested game costs a
+    rate-limited match-page fetch, and out-of-window rows can never enter a
+    form window. Returns lightweight dicts — the schedule carries names +
+    game_id only, so each nation's id is recovered from the match page at
+    ingest (as in the cup path). The stored ``season`` is derived per-game from
+    the match date; ``stage`` (the schedule round) joins the fixture natural
+    key so a round-robin's two orientations never collide.
     """
     games: list[dict] = []
     for _, row in schedule_df.reset_index().iterrows():
@@ -92,6 +119,8 @@ def select_all_games(schedule_df: pd.DataFrame) -> list[dict]:
         if game_id is None or pd.isna(game_id):
             continue
         date = _schedule_date(row)
+        if date < INGEST_FLOOR:
+            continue
         round_ = row.get("round")
         games.append(
             {
@@ -127,9 +156,11 @@ def backfill_international_season(
     ``edition`` is the soccerdata fetch code (e.g. "2022" for the 2022 World Cup,
     "2223" for the 2022-23 Nations League) — NOT the stored season.
     """
-    import soccerdata as sd
+    # the shim subclass survives qualifier history pages (no table#seasons);
+    # identical to sd.FBref for every league whose page has the table
+    from ingestion.fbref_shim import FBref
 
-    available = sd.FBref.available_leagues()
+    available = FBref.available_leagues()
     if league not in available:
         raise ValueError(
             f"league {league!r} not available to the FBref reader; run "
@@ -143,7 +174,7 @@ def backfill_international_season(
         if competition is None:
             raise ValueError(f"competition {competition_name!r} not seeded")
 
-        fb = sd.FBref(leagues=league, seasons=[edition], headless=False)
+        fb = FBref(leagues=league, seasons=[edition], headless=False)
         log(f"[{competition_name} {edition}] fetching schedule (solves Cloudflare once)…")
         schedule = fb.read_schedule()
         games = select_all_games(schedule)
@@ -244,8 +275,10 @@ def backfill_international_team_match(competition_name: str, log=print) -> dict:
 
 if __name__ == "__main__":
     # Two modes:
-    #   player (default):  python -m ingestion.internationals <edition> <comp> [limit]  (VPN off, watchdog)
-    #   team (zero-network): python -m ingestion.internationals team <comp>
+    #   player (default):  python -m ingestion.internationals <edition> <selector> [limit]  (VPN off, watchdog)
+    #     <selector> is a LEAGUE_IDS key (e.g. "WC Qual UEFA") — NOT necessarily
+    #     the stored competition name (all WC qual selectors feed "World Cup Qualifiers")
+    #   team (zero-network): python -m ingestion.internationals team <competition row name>
     argv = sys.argv[1:]
     team_mode = bool(argv) and argv[0] == "team"
     if team_mode:
@@ -264,8 +297,9 @@ if __name__ == "__main__":
         if comp not in LEAGUE_IDS:
             raise SystemExit(f"unknown competition {comp!r}; choose from {list(LEAGUE_IDS)}")
         limit = int(argv[2]) if len(argv) > 2 else None
+        competition_name, league = LEAGUE_IDS[comp]
         report = backfill_international_season(
-            edition, competition_name=comp, league=LEAGUE_IDS[comp], limit=limit
+            edition, competition_name=competition_name, league=league, limit=limit
         )
         print(
             f"\n{report['competition']} {report['edition']}: games={report['games']} "

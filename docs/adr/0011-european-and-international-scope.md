@@ -91,6 +91,46 @@ are present in the page, so a small vendored `read_seasons` shim is feasible —
 proof-of-concept agreed as the follow-up (2026-07-07) before the qualifier
 backfill (the larger half of the ~3,500–4,500 estimate) is attempted.
 
+## Update — qualifier scope grilled, shim proven (2026-07-09)
+
+The `read_seasons` shim PoC passed both halves. Offline: a ~40-line `sd.FBref`
+subclass (`ingestion/fbref_shim.py`) falls back to mining the per-edition `h2`
+headings when `table#seasons` is absent — validated against all 10 cached
+qualifier history pages (20 real editions resolved; the in-progress edition's
+unqualified URL is handled by the same headings). Live: WC Qual UEFA 2022
+schedule parsed **259/259 rows with game_ids**, rounds intact, and a match
+probe (Belgium–Wales) carried the full condensed stat set — the existing
+`ingest_match` path works unchanged. Note soccerdata's season-code quirk:
+single-year `parse("2021") → "2020"`, symmetric on both sides, so Euro-2020
+qualifying answers to fetch code "2020" *and* "2021".
+
+Scope decisions from the grill:
+
+- **Editions: 21** — WC qual 2022+2026 (6 confederations + inter-confed
+  play-offs), Euros Qualifying "2021"+2024, AFCON Qualifying
+  2021/2023/2025/2027, Asian Cup Qualifying 2023. Plus the **in-progress WC
+  2026 finals** (shim-free), ingested first and re-run after the July 19 final.
+- **Date cutoff at ingest: skip matches before 2020-08-01.** Makes the "dates
+  rule" mechanical and saves ~400+ out-of-window match-page fetches (Euro qual
+  "2021" alone is ~250 matches of 2019 with only the Oct/Nov 2020 play-offs in
+  window).
+- **One "World Cup Qualifiers" competition** for all confederations + the
+  play-offs (region self-evident from the nations; `stage` carries the round);
+  Euros/AFCON/Asian Cup qualifying stay 1:1 as their own competitions. Four
+  new Competition rows, not eleven.
+- **Dual-badged AFC matches → the World Cup label wins** (see CONTEXT.md,
+  **Dual-badged match**): chain order runs WC Qualifiers before Asian Cup
+  Qualifying; dedup makes the second pass skip the shared match ids, so Asian
+  Cup Qualifying's audit count is expectedly below its schedule count.
+- **Honest upstream gap:** FBref has no 2027 Asian Cup qualifying page at all,
+  so its third round (Mar 2025 – Mar 2026, fully in-window) cannot be ingested.
+  Documented, not worked around.
+- **Upcoming slate joins the scope:** add the World Cup to
+  `upcoming.ESPN_LEAGUES` with first-contact `espn_id` stamping onto the
+  nation rows the FBref ingest created. Acceptance test is live now: the 2026
+  semi-finals must materialise on the daily run once the quarter-finals
+  resolve them (a fixture cannot exist with an undecided side by design).
+
 ## Considered options
 
 - **Whole European competitions (PSG vs Bayern in scope)** — rejected: a different
