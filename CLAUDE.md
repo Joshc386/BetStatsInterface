@@ -126,6 +126,9 @@ python -m venv .venv
 # backend/logs/upcoming.log — check that log first if the slate looks stale.
 # fails loud on unknown ESPN names: extend ESPN_TEAM_ALIASES; a NEWLY PROMOTED
 # (ex-National-League) club must be seeded deliberately first — summer-prep step
+# World Cup slate: international placeholders are EPHEMERAL (August-boundary
+# season, purged once kicked off — FBref ingest owns the finished row); events
+# with an undecided side ("Semifinal 1 Winner") are held until both slots resolve
 
 # internationals (ADR 0011 — finals + NL + qualifiers; whole-competition, NO covered filter)
 # Arg 1 is the soccerdata FETCH EDITION ("2022" WC; "2223" NL two-year code), NOT the

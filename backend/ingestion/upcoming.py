@@ -37,6 +37,9 @@ ESPN_LEAGUES = {
     "Championship": "eng.2",
     "League One": "eng.3",
     "League Two": "eng.4",
+    # Internationals (ADR 0011): display-only placeholders with a different
+    # lifecycle from league fixtures — see upsert_scheduled / purge_stale.
+    "World Cup": "fifa.world",
 }
 
 # ESPN display/short name -> canonical team name, for first-contact matching
@@ -91,9 +94,18 @@ def _event_date(raw: str) -> dt.datetime:
     )
 
 
+def _is_placeholder(team: dict) -> bool:
+    """An undecided knockout slot — ESPN models it as a pseudo-team named
+    'Quarterfinal 2 Winner' / 'Semifinal 1 Loser' (with a real id). No nation
+    or club ends in Winner/Loser, so the suffix is the discriminator."""
+    return team["displayName"].endswith((" Winner", " Loser"))
+
+
 def parse_scoreboard(payload: dict) -> list[ScheduledEvent]:
     """Scheduled events only — anything in play, finished, or postponed is not
-    an upcoming fixture and is left to the results pipelines."""
+    an upcoming fixture and is left to the results pipelines. Knockout events
+    with an undecided side are dropped too: a Fixture needs two real teams, so
+    a semi-final appears on the first run after the quarter-finals resolve it."""
     out: list[ScheduledEvent] = []
     for event in payload.get("events", []):
         if event["status"]["type"]["name"] != "STATUS_SCHEDULED":
@@ -101,6 +113,8 @@ def parse_scoreboard(payload: dict) -> list[ScheduledEvent]:
         competitors = event["competitions"][0]["competitors"]
         sides = {c["homeAway"]: c["team"] for c in competitors}
         home, away = sides["home"], sides["away"]
+        if _is_placeholder(home) or _is_placeholder(away):
+            continue
         out.append(
             ScheduledEvent(
                 date=_event_date(event["date"]),
@@ -163,20 +177,38 @@ def upsert_scheduled(
 
     Returns 'created' | 'updated' | 'skipped_finished'. A finished fixture is
     never touched — the feed only ever moves kick-offs of unplayed games.
+
+    International fixtures diverge twice (ADR 0011): the season is the
+    August-boundary one the FBref ingest will store the played match under
+    (July-boundary `season_for` would split a summer tournament); and the
+    lookup is scheduled-rows-only, because a knockout pairing can repeat a
+    finished group meeting with the same orientation (the finished row carries
+    a stage; the feed knows none) — the placeholder must still be created.
+    Placeholders are ephemeral: the FBref ingest creates its own finished row
+    and `purge_stale_international_placeholders` removes the leftovers.
     """
-    fixture = session.scalars(
-        select(Fixture).where(
-            Fixture.competition_id == competition.id,
-            Fixture.season == season_for(date),
-            Fixture.home_team_id == home_id,
-            Fixture.away_team_id == away_id,
-        )
-    ).first()
+    is_intl = competition.type == "international"
+    if is_intl:
+        from ingestion.internationals import season_for_date
+
+        season = season_for_date(date)
+    else:
+        season = season_for(date)
+
+    query = select(Fixture).where(
+        Fixture.competition_id == competition.id,
+        Fixture.season == season,
+        Fixture.home_team_id == home_id,
+        Fixture.away_team_id == away_id,
+    )
+    if is_intl:
+        query = query.where(Fixture.status == "scheduled")
+    fixture = session.scalars(query).first()
     if fixture is None:
         session.add(
             Fixture(
                 competition_id=competition.id,
-                season=season_for(date),
+                season=season,
                 date=date,
                 home_team_id=home_id,
                 away_team_id=away_id,
@@ -190,6 +222,28 @@ def upsert_scheduled(
     fixture.date = date
     session.flush()
     return "updated"
+
+
+def purge_stale_international_placeholders(
+    session: Session, competition: Competition, now: dt.datetime
+) -> int:
+    """Delete this international competition's scheduled fixtures whose
+    kick-off has passed. Their real, finished rows come from the FBref ingest
+    under a stage-qualified key the feed can never match, so without this the
+    placeholders would linger as ghosts. League fixtures are untouched — their
+    ingest reuses the scheduled row in place (same natural key), which is why
+    only internationals need a purge."""
+    stale = session.scalars(
+        select(Fixture).where(
+            Fixture.competition_id == competition.id,
+            Fixture.status == "scheduled",
+            Fixture.date < now,
+        )
+    ).all()
+    for fixture in stale:
+        session.delete(fixture)
+    session.flush()
+    return len(stale)
 
 
 def ingest_upcoming(days: int = 45, *, log=print) -> dict:
@@ -208,7 +262,11 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
             ).one()
             events = parse_scoreboard(fetch_scoreboard(slug, today, end))
             unknown: list[str] = []
-            counts = {"created": 0, "updated": 0, "skipped_finished": 0}
+            counts = {"created": 0, "updated": 0, "skipped_finished": 0, "purged": 0}
+            if competition.type == "international":
+                counts["purged"] = purge_stale_international_placeholders(
+                    session, competition, dt.datetime.now(tz=dt.timezone.utc)
+                )
             for ev in events:
                 try:
                     home = resolve_espn_team(session, ev.home_espn_id, ev.home_names)
