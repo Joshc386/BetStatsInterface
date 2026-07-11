@@ -215,7 +215,9 @@ def test_purge_removes_only_past_scheduled_internationals():
         session.add_all([past, future, finished])
         session.flush()
 
-        assert purge_stale_international_placeholders(session, comp, now) == 1
+        # assert on OUR three rows only — the real DB may hold live placeholders
+        # that are also (correctly) purged relative to the synthetic `now`
+        assert purge_stale_international_placeholders(session, comp, now) >= 1
         remaining = session.scalars(
             select(Fixture).where(Fixture.id.in_([past.id, future.id, finished.id]))
         ).all()
