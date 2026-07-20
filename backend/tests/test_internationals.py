@@ -108,6 +108,22 @@ def test_select_all_games_skips_matches_before_ingest_floor():
     assert {g["game_id"] for g in games} == {"edge2222", "keep3333"}
 
 
+def test_select_all_games_drops_dateless_rows():
+    """A game_id with no date (a cancelled match FBref still lists — OFC 2022
+    Tonga–Cook Islands) is dropped: it cannot be season-tagged, and NaT would
+    otherwise crash season_for_date after slipping past the floor comparison."""
+    df = pd.DataFrame(
+        [
+            {"home_team": "Tonga", "away_team": "Cook Islands",
+             "game_id": "c714719c", "date": None, "round": "Qualification match"},
+            {"home_team": "Solomon Islands", "away_team": "Tahiti",
+             "game_id": "keep4444", "date": "2022-03-17", "round": "Group stage"},
+        ]
+    )
+    games = select_all_games(df)
+    assert [g["game_id"] for g in games] == ["keep4444"]
+
+
 def test_league_ids_maps_all_wc_qualifying_to_one_competition():
     """Every WC qualifying selector — all confederations + the inter-confed
     play-offs — stores under the single 'World Cup Qualifiers' competition

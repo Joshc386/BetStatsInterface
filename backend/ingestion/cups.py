@@ -75,7 +75,10 @@ def covered_team_ids(session: Session, season: str) -> set[int]:
 # Names the cup path may auto-create even though an existing team shares their
 # first word — i.e. confirmed genuinely-distinct clubs (a non-league "Oxford City"
 # vs the league "Oxford"). Empty until such a club actually appears in a draw.
-CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset()
+CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset({
+    # OFC qualifiers (2026-07-20): a nation, not New Zealand
+    "New Caledonia",
+})
 
 # Generic club-name prefixes skipped when picking the guard token below: at
 # European volume, first-word matching alone would deadlock on unrelated clubs

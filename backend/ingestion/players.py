@@ -157,6 +157,12 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "St. Kitts and Nevis": "St. Kitts & Nevis",  # player-df -> schedule spelling (Gold Cup)
     "Republic of Ireland": "Rep. of Ireland",  # player-df -> schedule spelling (Nations League)
     "Bosnia and Herzegovina": "Bosnia–Herz",  # player-df -> schedule spelling (NL; en-dash)
+    # Found by the qualifier chains (2026-07-20): CONCACAF + OFC minnows.
+    "Antigua and Barbuda": "Antigua–Barbuda",  # player-df -> schedule spelling (WCQ CONCACAF; en-dash)
+    "St. Vincent and the Grenadines": "St. Vincent",  # player-df -> schedule spelling (WCQ CONCACAF)
+    "British Virgin Islands": "British V.I.",  # player-df -> schedule spelling (WCQ CONCACAF)
+    "Turks and Caicos Islands": "Turks & Caicos",  # player-df -> schedule spelling (WCQ CONCACAF)
+    "Papua New Guinea": "Papua NG",  # player-df -> schedule spelling (WCQ OFC)
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

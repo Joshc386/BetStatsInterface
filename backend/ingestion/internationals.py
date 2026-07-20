@@ -119,6 +119,12 @@ def select_all_games(schedule_df: pd.DataFrame) -> list[dict]:
         if game_id is None or pd.isna(game_id):
             continue
         date = _schedule_date(row)
+        # a game_id with NO date is a cancelled/unplayed oddity (e.g. OFC 2022
+        # Tonga–Cook Islands, withdrawn after the Hunga Tonga eruption): it
+        # cannot be season-tagged and NaT would also slip past the floor
+        # comparison (NaT compares False), so drop it explicitly
+        if pd.isna(date):
+            continue
         if date < INGEST_FLOOR:
             continue
         round_ = row.get("round")
