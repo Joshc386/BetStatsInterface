@@ -27,12 +27,23 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import PointsAdjustment, TeamMatch
 from app.models.reference import Competition
-from ingestion.upcoming import ESPN_LEAGUES, resolve_espn_team
+from ingestion.upcoming import resolve_espn_team
 
 _STANDINGS_URL = (
     "https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
     "?season={start_year}"
 )
+
+# Domestic-league-only, deliberately NOT the shared `upcoming.ESPN_LEAGUES` —
+# that dict also carries international fixture-scoreboard entries (e.g. "World
+# Cup") which have no points-deduction concept and no standings `children`
+# shape, so reusing it here crashes on every non-domestic entry.
+DOMESTIC_LEAGUES = {
+    "Premier League": "eng.1",
+    "Championship": "eng.2",
+    "League One": "eng.3",
+    "League Two": "eng.4",
+}
 
 
 def espn_season_year(season: str) -> int:
@@ -97,7 +108,7 @@ def ingest_points_adjustments(*, apply: bool = False, log=print) -> list[dict]:
     """
     found: list[dict] = []
     with SessionLocal() as session:
-        for comp_name, slug in ESPN_LEAGUES.items():
+        for comp_name, slug in DOMESTIC_LEAGUES.items():
             competition = session.scalars(
                 select(Competition).where(Competition.name == comp_name)
             ).one()
