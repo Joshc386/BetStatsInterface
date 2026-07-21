@@ -163,6 +163,9 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     "British Virgin Islands": "British V.I.",  # player-df -> schedule spelling (WCQ CONCACAF)
     "Turks and Caicos Islands": "Turks & Caicos",  # player-df -> schedule spelling (WCQ CONCACAF)
     "Papua New Guinea": "Papua NG",  # player-df -> schedule spelling (WCQ OFC)
+    "Central African Republic": "CAR",  # player-df -> schedule spelling (WCQ CAF)
+    "São Tomé and Príncipe": "São Tomé",  # player-df -> schedule spelling (WCQ CAF)
+    "Brunei Darussalam": "Brunei",  # player-df -> schedule spelling (WCQ AFC)
     # In-universe League One/Two clubs the cup path silently DUPLICATED instead of
     # aliasing (auto-create was meant for non-league only) — found and merged
     # 2026-07-03 (`_merge_duplicate_teams.py`). Spellings observed as the duplicate

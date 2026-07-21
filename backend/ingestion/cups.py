@@ -78,6 +78,12 @@ def covered_team_ids(session: Session, season: str) -> set[int]:
 CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset({
     # OFC qualifiers (2026-07-20): a nation, not New Zealand
     "New Caledonia",
+    # CAF qualifiers (2026-07-20): Congo (Brazzaville), not Congo DR
+    "Congo",
+    # CAF qualifiers (2026-07-20): a nation, not South Africa
+    "South Sudan",
+    # AFC qualifiers (2026-07-20): North Korea, not Korea Republic
+    "Korea DPR",
 })
 
 # Generic club-name prefixes skipped when picking the guard token below: at
