@@ -131,6 +131,59 @@ Scope decisions from the grill:
   semi-finals must materialise on the daily run once the quarter-finals
   resolve them (a fixture cannot exist with an undecided side by design).
 
+## Update — qualifier backfill landed (2026-07-21)
+
+All 21 qualifier editions ingested in three chain sessions + recovery passes
+(2026-07-20/21), plus the WC 2026 finals swept to completion after the July 19
+final. **Final state:**
+
+| Competition | Fixtures | Team rows (corners) | Player rows | Date range |
+|---|---|---|---|---|
+| World Cup | 168 | 336 (100%) | 5,283 | 2022-11-20 → 2026-07-19 |
+| World Cup Qualifiers | 1,658 | 3,250 (46%) | 50,357 | 2020-10-08 → 2026-03-31 |
+| Euros Qualifying | 251 | 502 (100%) | 7,807 | 2020-10-08 → 2024-03-26 |
+| AFCON Qualifying | 415 | 744 (**0%**) | 11,333 | 2020-11-11 → 2026-03-31 |
+| Asian Cup Qualifying | 40 | 80 (0%) | 1,244 | 2021-10-07 → 2022-06-14 |
+| **Total** | **2,532** | **4,912** | **76,024** | |
+
+Zero unrecovered alias/guard trips at close — every skip during the live runs
+was resolved by the recovery-pass pattern (add alias/allowlist entry, re-run,
+cache absorbs it at ~zero network).
+
+**11 nation aliases + 6 allowlist entries** added across the three chains (on
+top of the 8 from finals+NL): Antigua–Barbuda, St. Vincent, British V.I.,
+Turks & Caicos, Papua NG, CAR, São Tomé, Brunei (aliases); New Caledonia,
+Congo, South Sudan, Korea DPR (guard-token allowlist — each a real nation
+colliding with an existing team's first-word guard token, never a duplicate).
+
+**Confirmed honest gaps, not bugs:**
+- **AFCON Qualifying + Asian Cup Qualifying carry ZERO corners** — verified
+  against a cached match page: the `team_stats_extra` panel is entirely absent
+  from these competitions' pages (same shape as the 34 FA Cup third-round
+  pages in ADR 0008). Not a parser miss; the panel doesn't exist upstream for
+  these confederations.
+- **World Cup Qualifiers sits at 46% corners** (vs ~100% for UEFA-only
+  competitions) — the figure blends corners-complete confederations (UEFA,
+  CONMEBOL) with corners-thin ones (CAF, CONCACAF, OFC minnows), consistent
+  with the ADR's accepted minor-confederation metric sparsity.
+- **69 no-player-row fixtures** (28 WCQ + 41 AFCON Qualifying): a recognizable
+  cluster of chronic African-qualifier withdrawals (Chad, Eritrea, Somalia,
+  South Sudan, Burundi, Djibouti each account for 4-6) plus small-nation
+  forfeits (Caribbean/Pacific minnows) and the **Russia suspension** carrying
+  into qualifiers (Russia v Poland, 2022-03-24 walkover) — the same shape as
+  the finals+NL backfill's honest gaps, at qualifier scale.
+- **7 fixtures with player rows but no team rows** (abandoned matches, no
+  final scorebox): includes the well-known **Brazil v Argentina (2021-09-05)**
+  — health officials halted the match ~7 minutes in over a COVID-quarantine
+  dispute; it never resumed. Same shape as finals+NL's Romania–Kosovo.
+
+The qualifier `read_seasons` shim (`ingestion/fbref_shim.py`) needed no
+changes once proven; the one code fix mid-backfill was a dateless-schedule-row
+guard (OFC 2022's cancelled Tonga–Cook Islands fixture had a `game_id` but no
+date, crashing `season_for_date`). ADR 0011's original scope for internationals
+is now fully delivered: finals, Nations League, and every qualifying campaign,
+six seasons deep.
+
 ## Considered options
 
 - **Whole European competitions (PSG vs Bayern in scope)** — rejected: a different
