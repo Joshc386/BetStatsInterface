@@ -8,6 +8,10 @@ import { LastNInput } from '../components/LastNInput'
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
+// Boolean-kind metrics (app/stats.py's registry) — their hit-rate threshold
+// number is ignored server-side, so don't echo a stale one in the label.
+const BOOL_METRICS = new Set(['btts', 'clean_sheet', 'carded'])
+
 const DEFAULT_METRIC: Record<Entity, string> = {
   team: 'btts',
   player: 'shots_on_target',
@@ -375,7 +379,8 @@ function SummaryBody({
           {s.hit_rate && (
             <div className="mb-5 inline-flex items-center gap-2 rounded-lg border border-sky-800 bg-sky-950/40 px-4 py-2">
               <span className="text-sm text-sky-300">
-                {label(s.metric)} {s.hit_rate.direction} {s.hit_rate.threshold}
+                {label(s.metric)} {s.hit_rate.direction}
+                {!BOOL_METRICS.has(s.metric) && ` ${s.hit_rate.threshold}`}
               </span>
               <span className="text-lg font-semibold text-slate-100">
                 {s.hit_rate.hits} of {s.hit_rate.n}
