@@ -19,9 +19,11 @@ export default function SearchPage() {
       </div>
       <UpcomingSlate />
       <p className="mt-8 text-center text-xs text-slate-600">
-        Team data: top 4 English tiers, 6 seasons. Player data: Premier League
-        &amp; Championship, 6 seasons. Both include domestic cups and European
-        ties involving covered clubs.
+        Team data: top 4 English tiers, 6 seasons, league-only. Player data:
+        Premier League &amp; Championship, 6 seasons — domestic cups and
+        European ties for covered clubs, plus full international
+        competitions (World Cup, Euros, Copa América, AFCON, Asian Cup, Gold
+        Cup, qualifiers, Nations League) for any player's caps.
       </p>
     </div>
   )
