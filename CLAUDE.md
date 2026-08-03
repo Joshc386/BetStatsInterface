@@ -163,6 +163,8 @@ python -m venv .venv
 # uc_driver.exe orphans a clean exit leaks. UEFA Super Cup excluded (deferred).
 #
 # SEASON ROLLOVER (do BEFORE the first 2627 match day):
+#   -> 2026-27 has a DATED working copy with steps 1-3 already checked off
+#      against the DB: docs/season-rollover-2627.md. Read that first.
 #   1. Seed any newly-promoted ex-National-League club (upcoming.py fails loud on
 #      unknown ESPN names — see the upcoming note above).
 #   2. Run tier 1 once so 2627 PL/Championship team_match exists — this is what
