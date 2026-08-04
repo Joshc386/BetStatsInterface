@@ -209,6 +209,15 @@ export function SquadFormPanel({
     )
   if (!data) return <p className="text-slate-500">Loading…</p>
 
+  // Membership is scope-independent, so a club can field a full squad list with
+  // nothing in the selected scope — typically a League One/Two club under League,
+  // whose player data is cup-only (coverage is PL + Championship). Say why instead
+  // of listing the whole squad at zero, which reads as broken data.
+  const scopeLabel = SCOPES.find(([v]) => v === c.scope)?.[1] ?? 'this scope'
+  const emptyInScope =
+    data.members.length > 0 &&
+    !data.rows.some((r) => c.scope === 'all' || r.competition_type === c.scope)
+
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
       <div className="mb-1 flex items-baseline justify-between">
@@ -218,11 +227,24 @@ export function SquadFormPanel({
       <p className="mb-2 text-xs text-slate-600">
         Based on recent appearances — not a registered roster. “Last seen” flags likely departures.
       </p>
-      <div className="overflow-hidden rounded-lg border border-slate-800">
-        {computed.map((p) => (
-          <PlayerRow key={p.player_id} p={p} metric={c.metric} />
-        ))}
-      </div>
+      {data.members.length === 0 ? (
+        <p className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-500">
+          No appearances on record yet.
+        </p>
+      ) : emptyInScope ? (
+        <p className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-500">
+          No {scopeLabel} player data for {data.team_name}.{' '}
+          {c.scope === 'club_league'
+            ? 'Player coverage is Premier League & Championship only — try Cups for their cup-tie appearances.'
+            : 'Their appearances are in other scopes.'}
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-800">
+          {computed.map((p) => (
+            <PlayerRow key={p.player_id} p={p} metric={c.metric} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
