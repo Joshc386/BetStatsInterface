@@ -14,3 +14,7 @@ echo [%date% %time%] exit code %NL_EXIT% >> logs\nightly.log
 if not %NL_EXIT%==0 (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0notify_failure.ps1" -Message "ingestion.nightly exited %NL_EXIT% - check backend\logs\nightly.log" -Title "BetStats nightly FAILED"
 )
+rem Hand Python's code back to Task Scheduler. Without this the wrapper ends on
+rem the notifier and cmd.exe returns 0, so Last Run Result read "success" on both
+rem mornings this job actually failed - the log line was the only honest signal.
+exit /b %NL_EXIT%

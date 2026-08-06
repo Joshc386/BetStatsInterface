@@ -79,12 +79,31 @@ class ScheduledEvent:
     away_names: tuple[str, str]
 
 
+def espn_json(url: str, *, timeout: int = 30) -> dict:
+    """GET one ESPN JSON document. Raises on HTTP failure.
+
+    Sends **no** ``User-Agent`` override, so urllib's own default goes out. A
+    descriptive ``betstats-research/1.0`` used to be sent from here and from
+    `points_adjustments`; on 2026-08-05 ESPN's Akamai edge began answering
+    **403 Access Denied** to it and both nightly jobs died together for two
+    mornings. The rule keys on the *shape*, not the name — ``research/1.0`` and
+    ``myapp/1.0`` are refused too, and so is a spoofed Chrome string (no
+    matching browser fingerprint behind it), while ``curl/8.5.0``,
+    ``python-requests/…`` and the urllib default all pass. Do not re-add a
+    custom ``token/version`` here.
+
+    One implementation on purpose: the two callers broke simultaneously because
+    each carried its own copy of that header.
+    """
+    with urllib.request.urlopen(
+        urllib.request.Request(url), timeout=timeout
+    ) as resp:
+        return json.load(resp)
+
+
 def fetch_scoreboard(slug: str, start: dt.date, end: dt.date) -> dict:
     """One league's scoreboard JSON for a date window. Raises on HTTP failure."""
-    url = _SCOREBOARD_URL.format(slug=slug, start=start, end=end)
-    req = urllib.request.Request(url, headers={"User-Agent": "betstats-research/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
+    return espn_json(_SCOREBOARD_URL.format(slug=slug, start=start, end=end))
 
 
 def _event_date(raw: str) -> dt.datetime:

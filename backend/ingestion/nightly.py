@@ -80,7 +80,9 @@ def run_nightly(now: dt.datetime | None = None, log=print) -> dict:
     (``season_for``) is testable without freezing time.
 
     Raises ``RuntimeError`` if a league that has already kicked off returned no
-    data — the alarm Task Scheduler turns into a blocking failure popup.
+    data — the alarm Task Scheduler turns into a blocking failure popup. A
+    failed points-deduction fetch is *not* such an alarm: ``points`` comes back
+    empty and the run stays green (see the DEGRADED path below).
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     season = season_for(now)
@@ -92,8 +94,20 @@ def run_nightly(now: dt.datetime | None = None, log=print) -> dict:
     for skip in team["skipped"]:
         log(f"[nightly]   SKIPPED {skip}")  # verdict below decides if it's fatal
 
-    points = points_adjustments.ingest_points_adjustments(apply=True, log=log)
-    log(f"[nightly] points adjustments in force: {len(points)}")
+    # Deductions are an *enrichment* of the computed table, not the league data
+    # this job exists to refresh, so a dead ESPN must not abort the run. On
+    # 2026-08-05 it did: a 403 propagated out of here and killed two nightlies,
+    # and because it raised *before* the verdict below, it also suppressed the
+    # football-data.co.uk alarm — a genuinely broken Facts source would have
+    # been masked by a broken footnote source. The previous ruling stays in the
+    # table either way; the upsert is idempotent and re-runs tomorrow.
+    try:
+        points = points_adjustments.ingest_points_adjustments(apply=True, log=log)
+        log(f"[nightly] points adjustments in force: {len(points)}")
+    except Exception as e:
+        points = []
+        log(f"[nightly]   DEGRADED points adjustments: {type(e).__name__}: {e} "
+            f"— existing rulings kept, retrying next run")
 
     # Last, so a dead source never costs us the points refresh above.
     broken = unexpected_skips(team["skipped"], first_kickoffs(season, now), now)

@@ -16,9 +16,7 @@ Run:  python -m ingestion.points_adjustments          # dry-run: print, no write
 
 from __future__ import annotations
 
-import json
 import sys
-import urllib.request
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -27,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import PointsAdjustment, TeamMatch
 from app.models.reference import Competition
-from ingestion.upcoming import resolve_espn_team
+from ingestion.upcoming import espn_json, resolve_espn_team
 
 _STANDINGS_URL = (
     "https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
@@ -54,9 +52,7 @@ def espn_season_year(season: str) -> int:
 def fetch_standings(slug: str, season: str) -> dict:
     """One league-season's standings JSON. Raises on HTTP failure."""
     url = _STANDINGS_URL.format(slug=slug, start_year=espn_season_year(season))
-    req = urllib.request.Request(url, headers={"User-Agent": "betstats-research/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
+    return espn_json(url)
 
 
 def parse_deductions(payload: dict) -> list[dict]:

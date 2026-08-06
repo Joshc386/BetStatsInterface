@@ -132,3 +132,70 @@ def test_nightly_stays_green_through_a_pre_season_skip(monkeypatch):
 
     result = nightly.run_nightly(now=NOW, log=lambda *a, **k: None)
     assert result["season"] == "2627"
+
+
+# --- a dead ESPN degrades the run, it does not end it --------------------------
+#
+# 2026-08-05/06: ESPN's edge started 403ing the User-Agent both ESPN callers sent,
+# the error propagated out of the points step, and the nightly died. Two things
+# were wrong with that. The deductions are an enrichment of the computed table,
+# not the league data this job exists to refresh; and raising there jumped the
+# football-data.co.uk verdict below it, so a broken Facts source would have been
+# hidden behind a broken footnote source.
+
+
+def test_nightly_survives_a_dead_points_source(monkeypatch):
+    """A 403 from ESPN leaves points empty and the run green."""
+    import urllib.error
+
+    def fake_points(*, apply, log=print):
+        raise urllib.error.HTTPError(
+            "https://site.api.espn.com/...", 403, "Forbidden", {}, None
+        )
+
+    monkeypatch.setattr(
+        nightly.team_match,
+        "ingest",
+        lambda seasons: {"per_league_season": {"Premier League 2627": 10},
+                         "skipped": [], "fixtures": 10, "team_match": 20},
+    )
+    monkeypatch.setattr(
+        nightly.points_adjustments, "ingest_points_adjustments", fake_points
+    )
+    monkeypatch.setattr(nightly, "first_kickoffs", lambda season, now: {})
+
+    lines: list[str] = []
+    result = nightly.run_nightly(now=NOW, log=lines.append)
+
+    assert result["points"] == []  # empty, not absent — callers keep their contract
+    assert result["team"]["fixtures"] == 10  # the job's actual work still landed
+    assert any("DEGRADED" in ln and "403" in ln for ln in lines), (
+        "a degraded source must be visible in the log, not silent"
+    )
+
+
+def test_a_dead_points_source_does_not_mask_the_fdcouk_alarm(monkeypatch):
+    """The regression that made this worse than a crash.
+
+    ESPN failing must not stop the football-data.co.uk verdict from firing — that
+    verdict is the only thing that tells "pre-season" from "Facts source broken".
+    """
+    def fake_points(*, apply, log=print):
+        raise RuntimeError("ESPN is down")
+
+    monkeypatch.setattr(
+        nightly.team_match,
+        "ingest",
+        lambda seasons: {"per_league_season": {}, "skipped": [SKIP_E1],
+                         "fixtures": 0, "team_match": 0},
+    )
+    monkeypatch.setattr(
+        nightly.points_adjustments, "ingest_points_adjustments", fake_points
+    )
+    monkeypatch.setattr(
+        nightly, "first_kickoffs",
+        lambda season, now: {"E1/2627": NOW - dt.timedelta(days=3)},
+    )
+
+    with pytest.raises(RuntimeError, match="E1/2627"):
+        nightly.run_nightly(now=NOW, log=lambda *a, **k: None)
