@@ -7,11 +7,13 @@
     },
     "ENG-League One": {
         "MatchHistory": "E2",
+        "FBref": "EFL League One",
         "season_start": "Aug",
         "season_end": "May"
     },
     "ENG-League Two": {
         "MatchHistory": "E3",
+        "FBref": "EFL League Two",
         "season_start": "Aug",
         "season_end": "May"
     },
