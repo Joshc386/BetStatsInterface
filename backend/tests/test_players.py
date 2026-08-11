@@ -6,6 +6,7 @@ Requires the soccerdata FBref cache (match_cc5b4244.html etc.) and DATABASE_URL.
 """
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -40,28 +41,34 @@ def _html(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _summary_df(match_id: str):
-    """Load one match's summary stats from the soccerdata cache (no network)."""
+@lru_cache(maxsize=None)
+def _fbref(league: str, season: str):
+    """One FBref client per league-season, reused across the whole test session.
+
+    Measured: constructing it costs ~17s, while the cached reads below take
+    ~0.3s — so the client, not the data, was the expensive part, and it is also
+    the only part that can reach the network (`force_cache` falls back to a live
+    fetch on a miss, which means a Cloudflare stall with no timeout). Building
+    one per call multiplied both the wall-clock and the chances of that stall.
+    """
     import logging
 
     logging.disable(logging.CRITICAL)
     import soccerdata as sd
 
-    fb = sd.FBref(leagues="ENG-Premier League", seasons="2425")
-    return fb.read_player_match_stats(
+    return sd.FBref(leagues=league, seasons=season)
+
+
+def _summary_df(match_id: str):
+    """Load one match's summary stats from the soccerdata cache (no network)."""
+    return _fbref("ENG-Premier League", "2425").read_player_match_stats(
         stat_type="summary", match_id=match_id, force_cache=True
     )
 
 
 def _schedule_df(season: str):
     """Load the PL schedule for a season from the soccerdata cache (no network)."""
-    import logging
-
-    logging.disable(logging.CRITICAL)
-    import soccerdata as sd
-
-    fb = sd.FBref(leagues="ENG-Premier League", seasons=season)
-    return fb.read_schedule(force_cache=True)
+    return _fbref("ENG-Premier League", season).read_schedule(force_cache=True)
 
 
 def _champ_schedule_df(season: str):
@@ -69,13 +76,7 @@ def _champ_schedule_df(season: str):
 
     The Championship schedule carries promotion play-off rows; the PL's does not.
     """
-    import logging
-
-    logging.disable(logging.CRITICAL)
-    import soccerdata as sd
-
-    fb = sd.FBref(leagues="ENG-Championship", seasons=season)
-    return fb.read_schedule(force_cache=True)
+    return _fbref("ENG-Championship", season).read_schedule(force_cache=True)
 
 
 def test_parse_player_ids_is_scoped_to_lineups():
