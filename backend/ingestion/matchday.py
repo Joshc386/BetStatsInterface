@@ -16,6 +16,11 @@ competitions explicitly:
 
     python -m ingestion.matchday "FA Cup" "Champions League"
 
+Every run then reports any cup/European competition still holding unfetched
+player data for the current season, with the command to fetch it. The
+unattended task only ever ingests the two leagues, so without that line an
+unfetched cup round leaves a log identical to a day with no work at all.
+
 UEFA Super Cup is excluded (soccerdata's ``read_schedule`` crashes on its
 single-match page — ADR 0011); requesting it fails loud.
 
@@ -71,6 +76,35 @@ def _sweep_orphans(log=print) -> None:
     log("[matchday] swept uc_driver.exe orphans")
 
 
+def manual_pending(season: str) -> dict[str, int]:
+    """Cup/European competitions holding finished-but-unfetched player data.
+
+    The unattended task runs with no args, so it only ever ingests the two
+    leagues — a cup round or European night needs an explicit request, and
+    nothing else would say so. Pure DB reads (``_pending``), no network.
+
+    Current season only, deliberately: a handful of older fixtures (minor-nation
+    qualifiers, a couple of one-offs) have no player data on FBref at all, and
+    reporting those forever would train the reader to skip the line.
+    """
+    return {
+        comp: n
+        for comp in CUP_PLAYER_COMPETITIONS
+        if (n := run_backfill._pending(season, comp)) > 0
+    }
+
+
+def _log_manual_pending(season: str, log) -> dict[str, int]:
+    """Report the work the unattended run will not do, with the command to do it."""
+    pending = manual_pending(season)
+    if pending:
+        detail = ", ".join(f"{comp} {n}" for comp, n in pending.items())
+        args = " ".join(f'"{comp}"' for comp in pending)
+        log(f"[matchday] MANUAL RUN NEEDED — pending player data: {detail}")
+        log(f"[matchday]   python -m ingestion.matchday {args}   (VPN OFF, headful)")
+    return pending
+
+
 def run_matchday(
     competitions: list[str] | None = None,
     season: str | None = None,
@@ -95,8 +129,15 @@ def run_matchday(
     plan = plan_competitions(competitions, pending_leagues)
 
     if not plan:
-        log(f"[matchday] no pending player data for {season} — nothing to do")
-        return {"season": season, "ran": [], "results": {}}
+        log(f"[matchday] no pending league player data for {season}")
+        # The quiet-day case this matters most for — an unfetched cup round
+        # would otherwise leave a log identical to a day with genuinely no work.
+        return {
+            "season": season,
+            "ran": [],
+            "results": {},
+            "pending_manual": _log_manual_pending(season, log),
+        }
 
     log(f"[matchday] {season}: refreshing {plan}")
     results: dict[str, int] = {}
@@ -111,7 +152,13 @@ def run_matchday(
         _sweep_orphans(log)
 
     log(f"[matchday] done — {results}")
-    return {"season": season, "ran": plan, "results": results}
+    # After the run, so anything just ingested is no longer counted as pending.
+    return {
+        "season": season,
+        "ran": plan,
+        "results": results,
+        "pending_manual": _log_manual_pending(season, log),
+    }
 
 
 if __name__ == "__main__":
