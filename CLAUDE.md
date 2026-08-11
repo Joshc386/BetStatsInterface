@@ -36,11 +36,20 @@ Personal, single-user web app for **betting research**. Ingests free football da
 
 **Do not hardcode league codes.** Resolve them via `soccerdata`'s `available_leagues()`.
 
-**FBref stat_type → metric mapping** (use these, don't rediscover) — FBref no longer provides **xG/npxG** (removed Jan 2026); source xG from FotMob:
-- `summary` → shots, shots on target, cards (NOT xG anymore)
-- `defense` → tackles
-- `misc` → fouls drawn (`Fld`), fouls committed (`Fls`), cards, offsides
-- One match page = both squads, all players. Multiple stat-types for one match = one cached fetch per type, not per player.
+**FBref stat_type → metric mapping** (use these, don't rediscover):
+- **`summary` is the ONLY stat_type fetched — one fetch per match, never per player.**
+  It carries everything ingested: `Gls`, `Ast`, `Sh`, `SoT`, `TklW`, `Fld`, `Fls`,
+  `CrdY`, `CrdR`, `Min` (see `players._STAT_COLS`). `defense`/`misc` are NOT
+  fetched — do not add fetches for tackles or fouls, they are already in `summary`.
+- `tackles` = **`TklW` (tackles WON)** — FBref dropped total `Tkl`.
+- **Absent from `summary`, by source:** `xg`/`npxG` (FBref removed Jan 2026) and
+  `second_yellows`. xG stays NULL — deferred out of v1 per `docs/adr/0002`; FotMob
+  is NOT an option (soccerdata 1.9.0 removed it).
+- One match page = both squads, all players.
+- **Payload varies per match.** Some pages return rows with `Min`/`Gls`/cards but
+  NULL `Sh`/`SoT`/`TklW`/`Fls` — e.g. 34 FA Cup fixtures (R3 weekends, Jan 2024 +
+  Jan 2025, including Arsenal–Man United), so it is a per-page quirk, NOT a
+  lower-league or condensed-format effect. Expect NULLs; never assume uniformity.
 
 **Cross-source reconciliation:** team/player names differ between FBref, football-data.co.uk, ESPN, and FotMob ("Man Utd" vs "Manchester United"). Resolve source names → canonical `id` via the `fbref_id` / `fdcouk_name` / `espn_id` / `fotmob_id` columns in the ingestion step. Never join on raw display strings.
 
