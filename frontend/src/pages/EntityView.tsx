@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { api, type Entity, type SearchHit, type Summary } from '../api'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { api, type Entity, type SearchHit, type Summary, type UpcomingFixture } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { SingleSquad } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
+import { EntityLink, teamHref } from '../components/EntityLink'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -118,7 +119,10 @@ export default function EntityView({ entity }: { entity: Entity }) {
       </div>
 
       {entity === 'team' && Number.isFinite(entityId) && (
-        <OpponentPicker teamId={entityId} />
+        <>
+          <NextFixtures teamId={entityId} />
+          <OpponentPicker teamId={entityId} />
+        </>
       )}
 
       {/* Controls */}
@@ -250,6 +254,67 @@ export default function EntityView({ entity }: { entity: Entity }) {
   )
 }
 
+/** This club's actual next fixtures, as links into the Fixture view — the thing
+ * you nearly always want from a team page, previously only reachable by typing
+ * the opponent's name into the picker below. Client-side filter of the shared
+ * upcoming feed; no extra endpoint. */
+function NextFixtures({ teamId }: { teamId: number }) {
+  const [fixtures, setFixtures] = useState<UpcomingFixture[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .fixturesUpcoming(60)
+      .then(
+        (d) =>
+          !cancelled &&
+          setFixtures(
+            d
+              .filter((f) => f.home_id === teamId || f.away_id === teamId)
+              .slice(0, 3),
+          ),
+      )
+      .catch(() => !cancelled && setFixtures([])) // a bonus panel must never break the page
+    return () => {
+      cancelled = true
+    }
+  }, [teamId])
+
+  if (!fixtures || fixtures.length === 0) return null
+
+  return (
+    <div className="mb-4">
+      <h2 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+        Next fixtures
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {fixtures.map((f) => {
+          const isHome = f.home_id === teamId
+          return (
+            <Link
+              key={f.fixture_id}
+              to={`/fixture/${f.home_id}/vs/${f.away_id}`}
+              className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-1.5 text-sm hover:border-sky-800 hover:bg-slate-900"
+            >
+              <span className="text-slate-500">
+                {new Date(f.date).toLocaleDateString('en-GB', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </span>{' '}
+              <span className="text-slate-600">{isHome ? 'v' : '@'}</span>{' '}
+              <span className="text-slate-100">
+                {isHome ? f.away_name : f.home_name}
+              </span>
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function OpponentPicker({ teamId }: { teamId: number }) {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
@@ -278,7 +343,7 @@ function OpponentPicker({ teamId }: { teamId: number }) {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Compare head-to-head vs…"
+        placeholder="or compare head-to-head vs any team…"
         className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600"
       />
       {hits.length > 0 && (
@@ -416,7 +481,9 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
             <td className="py-1.5 pr-3 text-slate-400">
               {new Date(r.date).toLocaleDateString('en-GB')}
             </td>
-            <td className="py-1.5 pr-3 text-slate-200">{r.opponent ?? '—'}</td>
+            <td className="py-1.5 pr-3 text-slate-200">
+              <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
+            </td>
             <td className="py-1.5 pr-3 text-slate-500">
               {r.is_home ? 'H' : 'A'}
             </td>

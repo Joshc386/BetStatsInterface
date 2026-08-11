@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { LastNInput } from '../components/LastNInput'
+import { EntityLink, teamHref } from '../components/EntityLink'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -359,7 +360,9 @@ function FlatBreakdown({
         {ordered.map((r, i) => (
           <tr key={i} className="border-b border-slate-900 last:border-0 hover:bg-slate-900/40">
             <td className="py-1.5 pl-3 pr-3 text-slate-400">{date(r.date)}</td>
-            <td className="py-1.5 pr-3 text-slate-200">{r.opponent ?? '—'}</td>
+            <td className="py-1.5 pr-3 text-slate-200">
+              <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
+            </td>
             <td className="py-1.5 pr-3 text-slate-500">{r.is_home ? 'H' : 'A'}</td>
             {showComp && <td className="py-1.5 pr-3 text-xs text-slate-600">{r.competition ?? ''}</td>}
             <td className="py-1.5 pr-3 text-right text-slate-400">{fmt(r.minutes, 0)}′</td>

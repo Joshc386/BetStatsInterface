@@ -12,12 +12,14 @@ export default function App() {
           <div className="max-w-md flex-1">
             <SearchBar compact />
           </div>
-          <Link
-            to="/table"
-            className="whitespace-nowrap text-sm text-slate-400 hover:text-slate-200"
-          >
-            League table
-          </Link>
+          <nav className="flex shrink-0 items-center gap-4 text-sm">
+            <Link to="/" className="whitespace-nowrap text-slate-400 hover:text-slate-200">
+              Fixtures
+            </Link>
+            <Link to="/table" className="whitespace-nowrap text-slate-400 hover:text-slate-200">
+              League table
+            </Link>
+          </nav>
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6">

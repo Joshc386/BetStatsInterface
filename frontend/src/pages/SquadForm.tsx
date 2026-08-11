@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '../api'
+import { EntityLink, playerHref } from '../components/EntityLink'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { LastNInput } from '../components/LastNInput'
 
@@ -254,16 +255,31 @@ function PlayerRow({ p, metric }: { p: Computed; metric: string }) {
   const def = PLAYER_METRICS[metric] ?? PLAYER_METRICS.shots_on_target
   return (
     <div className="border-b border-slate-900 last:border-0">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-900/50"
-      >
-        <span className="w-4 shrink-0 text-xs text-slate-600">{open ? '▾' : '▸'}</span>
-        <span className="flex-1 truncate text-slate-200">{p.player}</span>
-        <span className="w-24 shrink-0 text-right text-xs text-slate-500">{fmtDate(p.last_seen)}</span>
-        <span className="w-14 shrink-0 text-right text-xs text-slate-500">{p.apps} app{p.apps === 1 ? '' : 's'}</span>
-        <span className="w-20 shrink-0 text-right font-semibold text-slate-100">{p.figure}</span>
-      </button>
+      {/* The name is a link to the player, so the row cannot be one big <button>
+        * (an <a> inside a <button> is invalid). Chevron and the figures stay
+        * toggles, which keeps both affordances on the row. */}
+      <div className="flex w-full items-center gap-3 px-3 text-left text-sm hover:bg-slate-900/50">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={`${open ? 'Hide' : 'Show'} ${p.player}'s appearances`}
+          className="w-4 shrink-0 py-2 text-xs text-slate-600"
+        >
+          {open ? '▾' : '▸'}
+        </button>
+        <span className="min-w-0 flex-1 truncate py-2 text-slate-200">
+          <EntityLink to={playerHref(p.player_id)}>{p.player}</EntityLink>
+        </span>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex shrink-0 items-center gap-3 py-2"
+        >
+          <span className="w-24 shrink-0 text-right text-xs text-slate-500">{fmtDate(p.last_seen)}</span>
+          <span className="w-14 shrink-0 text-right text-xs text-slate-500">{p.apps} app{p.apps === 1 ? '' : 's'}</span>
+          <span className="w-20 shrink-0 text-right font-semibold text-slate-100">{p.figure}</span>
+        </button>
+      </div>
       {open && <MiniBreakdown rows={p.rows} def={def} metric={metric} playerId={p.player_id} />}
     </div>
   )

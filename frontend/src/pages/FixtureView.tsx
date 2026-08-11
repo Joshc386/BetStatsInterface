@@ -5,6 +5,7 @@ import { summarise, type MetricKind } from '../lib/aggregate'
 import { useCatalogue } from '../useCatalogue'
 import { SquadSection } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
+import { EntityLink, teamHref } from '../components/EntityLink'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -145,7 +146,9 @@ export default function FixtureView() {
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
       <h1 className="mb-1 text-2xl font-semibold text-slate-100">
-        {data.home_name} <span className="text-slate-500">vs</span> {data.away_name}
+        <EntityLink to={teamHref(data.home_id)}>{data.home_name}</EntityLink>{' '}
+        <span className="text-slate-500">vs</span>{' '}
+        <EntityLink to={teamHref(data.away_id)}>{data.away_name}</EntityLink>
       </h1>
       <p className="mb-4 text-sm text-slate-500">
         {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
