@@ -6,6 +6,7 @@ import { useCatalogue } from '../useCatalogue'
 import { SquadSection } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
+import { resultClass } from '../components/ResultChip'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -58,11 +59,6 @@ const aggLabel = (rows: FixtureRow[], m: MetricDef) => {
   if (a.average === null) return '—'
   return m.kind === 'bool' ? `${Math.round(a.average * 100)}%` : a.average.toFixed(2)
 }
-
-const resultClass = (r: string | null) =>
-  r === 'W' ? 'bg-emerald-900/60 text-emerald-300'
-    : r === 'L' ? 'bg-rose-900/60 text-rose-300'
-    : 'bg-slate-700/60 text-slate-300'
 
 const date = (d: string) => new Date(d).toLocaleDateString('en-GB')
 

@@ -38,6 +38,9 @@ export interface BreakdownRow {
   opponent: string | null
   is_home: boolean
   value: number | null
+  // W/D/L for that match — the player's club's result. Null when no team row
+  // exists for the appearance, so the chip must tolerate its absence.
+  result?: string | null
   minutes: number | null
   // players only — club + competition for that appearance (Spell grouping)
   team_id?: number | null

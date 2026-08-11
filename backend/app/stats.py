@@ -82,6 +82,11 @@ def entity_summary(
         getattr(table, attr).label("value"),
     ]
     club = aliased(Team)
+    # W/D/L for the row. A team row has it directly; a player's comes from his
+    # club's row for the same fixture (uq_team_match makes that join exact).
+    tm = aliased(TeamMatch)
+    if entity == "team":
+        cols.append(table.result.label("result"))
     if entity == "player":
         # the club + competition per appearance drive Spell / competition grouping
         cols += [
@@ -90,6 +95,7 @@ def entity_summary(
             club.canonical_name.label("team"),
             table.competition_id.label("competition_id"),
             Competition.name.label("competition"),
+            tm.result.label("result"),
         ]
 
     conds = [id_col == entity_id]
@@ -118,8 +124,16 @@ def entity_summary(
         .order_by(table.date.desc())
     )
     if entity == "player":
-        q = q.join(club, club.id == table.team_id).join(
-            Competition, Competition.id == table.competition_id
+        q = (
+            q.join(club, club.id == table.team_id)
+            .join(Competition, Competition.id == table.competition_id)
+            # OUTER: a player row can outlive its team row (player pass run
+            # without the team pass), and losing the appearance would be worse
+            # than losing the W/D/L chip.
+            .outerjoin(
+                tm,
+                (tm.fixture_id == table.fixture_id) & (tm.team_id == table.team_id),
+            )
         )
     if seasons:
         q = q.where(table.season.in_(seasons))
@@ -185,6 +199,7 @@ def entity_summary(
                 "opponent": r.opponent,
                 "is_home": r.is_home,
                 "value": r.value,
+                "result": getattr(r, "result", None),
                 "minutes": getattr(r, "minutes", None),
                 "team_id": getattr(r, "team_id", None),
                 "team": getattr(r, "team", None),

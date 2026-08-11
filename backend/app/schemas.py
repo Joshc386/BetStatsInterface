@@ -13,6 +13,10 @@ class BreakdownRow(BaseModel):
     opponent: str | None
     is_home: bool
     value: float | None
+    # The team's W/D/L for that match. For a player it is his club's result,
+    # read across from team_match — NULL when no team row exists (a player pass
+    # run without its team pass), so the UI must tolerate its absence.
+    result: str | None = None
     minutes: int | None = None  # players only
     # players only — the club + competition for that appearance (Spell grouping)
     team_id: int | None = None

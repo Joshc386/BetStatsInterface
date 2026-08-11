@@ -5,6 +5,7 @@ import { useCatalogue } from '../useCatalogue'
 import { SingleSquad } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
+import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -464,15 +465,21 @@ function SummaryBody({
 function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boolean }) {
   // Chronological oldest→newest from the API; show newest first for reading.
   const rows = [...s.breakdown].reverse()
+  // Bars are scaled to this window, not to some absolute — the question is
+  // "which of these games stand out", not "how does this compare to all football".
+  const max = Math.max(0, ...rows.map((r) => r.value ?? 0))
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr className="border-b border-slate-800 text-left text-slate-500">
           <th className="py-2 pr-3 font-normal">Date</th>
+          <th className="w-8 py-2 pr-3 font-normal" />
           <th className="py-2 pr-3 font-normal">Opponent</th>
           <th className="py-2 pr-3 font-normal">H/A</th>
           {isPlayer && <th className="py-2 pr-3 text-right font-normal">Min</th>}
-          <th className="py-2 pr-3 text-right font-normal">{label(s.metric)}</th>
+          <th className="py-2 pr-3 text-right font-normal" colSpan={2}>
+            {label(s.metric)}
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -480,6 +487,9 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
           <tr key={i} className="border-b border-slate-900 hover:bg-slate-900/40">
             <td className="py-1.5 pr-3 text-slate-400">
               {new Date(r.date).toLocaleDateString('en-GB')}
+            </td>
+            <td className="py-1.5 pr-3">
+              <ResultChip result={r.result} />
             </td>
             <td className="py-1.5 pr-3 text-slate-200">
               <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
@@ -492,7 +502,10 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
                 {fmt(r.minutes, 0)}
               </td>
             )}
-            <td className="py-1.5 pr-3 text-right font-medium text-slate-100">
+            <td className="w-24 py-1.5 pr-3">
+              <ValueBar fraction={barFraction(r.value, max)} />
+            </td>
+            <td className="w-14 py-1.5 pr-3 text-right font-medium text-slate-100">
               {fmt(r.value)}
             </td>
           </tr>
@@ -500,7 +513,7 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
       </tbody>
       <tfoot>
         <tr className="text-slate-300">
-          <td className="py-2 pr-3 font-medium" colSpan={isPlayer ? 4 : 3}>
+          <td className="py-2 pr-3 font-medium" colSpan={isPlayer ? 6 : 5}>
             Total ({s.games} games)
           </td>
           <td className="py-2 pr-3 text-right font-semibold">{fmt(s.total)}</td>

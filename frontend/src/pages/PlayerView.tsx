@@ -4,6 +4,7 @@ import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
+import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -354,19 +355,27 @@ function FlatBreakdown({
   showComp?: boolean
 }) {
   const ordered = alreadyOrdered ? rows : [...rows].reverse()
+  // Scaled to this list, so each segment's bars read against their own peers.
+  const max = Math.max(0, ...ordered.map((r) => r.value ?? 0))
   return (
     <table className="w-full border-collapse text-sm">
       <tbody>
         {ordered.map((r, i) => (
           <tr key={i} className="border-b border-slate-900 last:border-0 hover:bg-slate-900/40">
             <td className="py-1.5 pl-3 pr-3 text-slate-400">{date(r.date)}</td>
+            <td className="py-1.5 pr-3">
+              <ResultChip result={r.result} />
+            </td>
             <td className="py-1.5 pr-3 text-slate-200">
               <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
             </td>
             <td className="py-1.5 pr-3 text-slate-500">{r.is_home ? 'H' : 'A'}</td>
             {showComp && <td className="py-1.5 pr-3 text-xs text-slate-600">{r.competition ?? ''}</td>}
             <td className="py-1.5 pr-3 text-right text-slate-400">{fmt(r.minutes, 0)}′</td>
-            <td className="py-1.5 pr-3 text-right font-medium text-slate-100">{fmt(r.value)}</td>
+            <td className="w-20 py-1.5 pr-3">
+              <ValueBar fraction={barFraction(r.value, max)} />
+            </td>
+            <td className="w-12 py-1.5 pr-3 text-right font-medium text-slate-100">{fmt(r.value)}</td>
           </tr>
         ))}
       </tbody>
