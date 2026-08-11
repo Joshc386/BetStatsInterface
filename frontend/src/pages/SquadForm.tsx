@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '../api'
 import { EntityLink, playerHref } from '../components/EntityLink'
+import { ControlBar, ControlGroup, Field, Toggle, ctrl } from '../components/controls'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { LastNInput } from '../components/LastNInput'
 
@@ -17,8 +18,6 @@ const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB')
 
-const ctrl =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
 
 interface MetricDef {
   kind: MetricKind
@@ -88,7 +87,8 @@ export function SquadControls({
   metricList: string[]
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+    <ControlBar>
+      <ControlGroup>
       <Field label="Metric">
         <select className={ctrl} value={c.metric} onChange={(e) => c.setMetric(e.target.value)}>
           {metricList.map((m) => (
@@ -96,12 +96,18 @@ export function SquadControls({
           ))}
         </select>
       </Field>
+      </ControlGroup>
+      <ControlGroup>
       <Field label="Last N">
         <LastNInput n={c.n} setN={c.setN} max={30} />
       </Field>
+      </ControlGroup>
+      <ControlGroup>
       <Field label="Scope">
         <Toggle value={c.scope} onChange={c.setScope} options={SCOPES} />
       </Field>
+      </ControlGroup>
+      <ControlGroup>
       <Field label="Threshold (hit-rate)">
         <div className="flex gap-1">
           <input
@@ -123,7 +129,8 @@ export function SquadControls({
           onChange={(e) => c.setMinMinutes(e.target.value)} className={`${ctrl} w-20`}
         />
       </Field>
-    </div>
+      </ControlGroup>
+    </ControlBar>
   )
 }
 
@@ -372,35 +379,4 @@ function figureText(
   return kind === 'bool' ? `${Math.round(agg.average * 100)}%` : agg.average.toFixed(2)
 }
 
-function Toggle({
-  value, onChange, options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: Array<[string, string]>
-}) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
-      {options.map(([v, text]) => (
-        <button
-          key={v}
-          onClick={() => onChange(v)}
-          className={`px-3 py-1.5 text-sm ${
-            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
-          }`}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {children}
-    </label>
-  )
-}

@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom'
 import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { LastNInput } from '../components/LastNInput'
+import {
+  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl,
+} from '../components/controls'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 
@@ -33,8 +36,6 @@ const SCOPES: Array<[string, string]> = [
 
 type Segment = 'team' | 'competition' | 'opponent' | 'none'
 
-const ctrl =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
 
 interface Group {
   key: number
@@ -177,7 +178,8 @@ export default function PlayerView() {
       )}
 
       {/* controls */}
-      <div className="mb-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <ControlBar>
+        <ControlGroup>
         <Field label="Metric">
           <select className={ctrl} value={metric} onChange={(e) => setMetric(e.target.value)}>
             {metricList.map((m) => (
@@ -185,6 +187,8 @@ export default function PlayerView() {
             ))}
           </select>
         </Field>
+        </ControlGroup>
+        <ControlGroup>
         <Field label="Window">
           <Toggle
             value={winMode}
@@ -211,6 +215,8 @@ export default function PlayerView() {
             </select>
           </Field>
         )}
+        </ControlGroup>
+        <ControlGroup>
         <Field label="Scope">
           <Toggle value={scope} onChange={setScope} options={SCOPES} />
         </Field>
@@ -228,6 +234,8 @@ export default function PlayerView() {
             options={[['team', 'Team'], ['competition', 'Competition'], ['opponent', 'Opponent'], ['none', 'None']]}
           />
         </Field>
+        </ControlGroup>
+        <ControlGroup>
         <Field label="Threshold (hit-rate)">
           <div className="flex gap-1">
             <input
@@ -246,7 +254,8 @@ export default function PlayerView() {
             onChange={(e) => setMinMinutes(e.target.value)} className={`${ctrl} w-20`}
           />
         </Field>
-      </div>
+        </ControlGroup>
+      </ControlBar>
 
       {(error || catError) && (
         <div className="mb-4 rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
@@ -281,16 +290,15 @@ export default function PlayerView() {
               </div>
 
               {summary.hit_rate && (
-                <div className="mb-5 inline-flex items-center gap-2 rounded-lg border border-sky-800 bg-sky-950/40 px-4 py-2">
-                  <span className="text-sm text-sky-300">
-                    {label(summary.metric)} {summary.hit_rate.direction}
-                    {!BOOL_METRICS.has(summary.metric) && ` ${summary.hit_rate.threshold}`}
-                  </span>
-                  <span className="text-lg font-semibold text-slate-100">
-                    {summary.hit_rate.hits} of {summary.hit_rate.n}
-                  </span>
-                  <span className="text-sm text-sky-400">({summary.hit_rate.pct}%)</span>
-                </div>
+                <HitRate
+                  metricLabel={label(summary.metric)}
+                  direction={summary.hit_rate.direction}
+                  threshold={summary.hit_rate.threshold}
+                  hits={summary.hit_rate.hits}
+                  n={summary.hit_rate.n}
+                  pct={summary.hit_rate.pct}
+                  showThreshold={!BOOL_METRICS.has(summary.metric)}
+                />
               )}
 
               {groups ? (
@@ -392,44 +400,5 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   )
 }
 
-function Toggle({
-  value, onChange, options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: Array<[string, string]>
-}) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
-      {options.map(([v, text]) => (
-        <button
-          key={v}
-          onClick={() => onChange(v)}
-          className={`px-3 py-1.5 text-sm ${
-            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
-          }`}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {children}
-    </label>
-  )
-}
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-xl font-semibold text-slate-100">{value}</div>
-    </div>
-  )
-}

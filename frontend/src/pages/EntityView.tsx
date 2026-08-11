@@ -6,6 +6,9 @@ import { SingleSquad } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
+import {
+  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl,
+} from '../components/controls'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -92,8 +95,6 @@ export default function EntityView({ entity }: { entity: Entity }) {
     }
   }, [entity, entityId, metric, winMode, n, selectedSeasons, venue, competitionId, windowMode, threshold, direction])
 
-  const ctrl =
-    'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
 
   // Compose the scope subtitle client-side (the API's window string surfaces the
   // raw competition id; we have the name in the catalogue).
@@ -126,29 +127,32 @@ export default function EntityView({ entity }: { entity: Entity }) {
         </>
       )}
 
-      {/* Controls */}
-      <div className="mb-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-        <Field label="Metric">
-          <select
-            className={ctrl}
-            value={metric}
-            onChange={(e) => setMetric(e.target.value)}
-          >
-            {metricList.map((m) => (
-              <option key={m} value={m}>
-                {label(m)}
-              </option>
-            ))}
-          </select>
-        </Field>
+      {/* Controls — grouped what / window / filters / hit-rate */}
+      <ControlBar>
+        <ControlGroup>
+          <Field label="Metric">
+            <select
+              className={ctrl}
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+            >
+              {metricList.map((m) => (
+                <option key={m} value={m}>
+                  {label(m)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </ControlGroup>
 
-        <Field label="Window">
-          <Toggle
-            value={winMode}
-            onChange={(v) => setWinMode(v as 'games' | 'seasons')}
-            options={[['games', 'Games'], ['seasons', 'Seasons']]}
-          />
-        </Field>
+        <ControlGroup>
+          <Field label="Window">
+            <Toggle
+              value={winMode}
+              onChange={(v) => setWinMode(v as 'games' | 'seasons')}
+              options={[['games', 'Games'], ['seasons', 'Seasons']]}
+            />
+          </Field>
 
         {winMode === 'games' ? (
           <>
@@ -183,51 +187,56 @@ export default function EntityView({ entity }: { entity: Entity }) {
             </select>
           </Field>
         )}
+        </ControlGroup>
 
-        <Field label="Venue">
-          <Toggle
-            value={venue}
-            onChange={setVenue}
-            options={[['all', 'All'], ['home', 'Home'], ['away', 'Away']]}
-          />
-        </Field>
-
-        <Field label="Competition">
-          <select
-            className={ctrl}
-            value={competitionId}
-            onChange={(e) => setCompetitionId(e.target.value)}
-          >
-            <option value="">All competitions</option>
-            {competitions.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Threshold (hit-rate)">
-          <div className="flex gap-1">
-            <input
-              type="number"
-              step="0.5"
-              placeholder="—"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              className={`${ctrl} w-20`}
+        <ControlGroup>
+          <Field label="Venue">
+            <Toggle
+              value={venue}
+              onChange={setVenue}
+              options={[['all', 'All'], ['home', 'Home'], ['away', 'Away']]}
             />
+          </Field>
+
+          <Field label="Competition">
             <select
               className={ctrl}
-              value={direction}
-              onChange={(e) => setDirection(e.target.value as 'over' | 'under')}
+              value={competitionId}
+              onChange={(e) => setCompetitionId(e.target.value)}
             >
-              <option value="over">over</option>
-              <option value="under">under</option>
+              <option value="">All competitions</option>
+              {competitions.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
             </select>
-          </div>
-        </Field>
-      </div>
+          </Field>
+        </ControlGroup>
+
+        <ControlGroup>
+          <Field label="Threshold (hit-rate)">
+            <div className="flex gap-1">
+              <input
+                type="number"
+                step="0.5"
+                placeholder="—"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                className={`${ctrl} w-20`}
+              />
+              <select
+                className={ctrl}
+                value={direction}
+                onChange={(e) => setDirection(e.target.value as 'over' | 'under')}
+              >
+                <option value="over">over</option>
+                <option value="under">under</option>
+              </select>
+            </div>
+          </Field>
+        </ControlGroup>
+      </ControlBar>
 
       {(error || catError) && (
         <div className="mb-4 rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
@@ -365,47 +374,8 @@ function OpponentPicker({ teamId }: { teamId: number }) {
   )
 }
 
-function Toggle({
-  value, onChange, options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: Array<[string, string]>
-}) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
-      {options.map(([v, text]) => (
-        <button
-          key={v}
-          onClick={() => onChange(v)}
-          className={`px-3 py-1.5 text-sm ${
-            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
-          }`}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {children}
-    </label>
-  )
-}
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-xl font-semibold text-slate-100">{value}</div>
-    </div>
-  )
-}
 
 function SummaryBody({
   summary: s,
@@ -443,16 +413,15 @@ function SummaryBody({
           </div>
 
           {s.hit_rate && (
-            <div className="mb-5 inline-flex items-center gap-2 rounded-lg border border-sky-800 bg-sky-950/40 px-4 py-2">
-              <span className="text-sm text-sky-300">
-                {label(s.metric)} {s.hit_rate.direction}
-                {!BOOL_METRICS.has(s.metric) && ` ${s.hit_rate.threshold}`}
-              </span>
-              <span className="text-lg font-semibold text-slate-100">
-                {s.hit_rate.hits} of {s.hit_rate.n}
-              </span>
-              <span className="text-sm text-sky-400">({s.hit_rate.pct}%)</span>
-            </div>
+            <HitRate
+              metricLabel={label(s.metric)}
+              direction={s.hit_rate.direction}
+              threshold={s.hit_rate.threshold}
+              hits={s.hit_rate.hits}
+              n={s.hit_rate.n}
+              pct={s.hit_rate.pct}
+              showThreshold={!BOOL_METRICS.has(s.metric)}
+            />
           )}
 
           <Breakdown summary={s} isPlayer={isPlayer} />

@@ -7,6 +7,7 @@ import { SquadSection } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { resultClass } from '../components/ResultChip'
+import { ControlBar, ControlGroup, Field, Toggle } from '../components/controls'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -152,7 +153,8 @@ export default function FixtureView() {
       </p>
 
       {/* Mode + window */}
-      <div className="mb-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <ControlBar>
+        <ControlGroup>
         <Field label="View">
           <Toggle
             value={mode}
@@ -164,6 +166,8 @@ export default function FixtureView() {
             ]}
           />
         </Field>
+        </ControlGroup>
+        <ControlGroup>
         {mode !== 'squad' && (
           <Field label="Last N">
             <LastNInput n={n} setN={setN} max={50} />
@@ -184,7 +188,8 @@ export default function FixtureView() {
             />
           </Field>
         )}
-      </div>
+        </ControlGroup>
+      </ControlBar>
 
       {mode === 'form' ? (
         <FormMode
@@ -520,32 +525,7 @@ function VenuePanel({ name, value, onChange, count }: { name: string; value: Ven
   )
 }
 
-function Toggle({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          onClick={() => onChange(v)}
-          className={`px-3 py-1.5 text-sm ${
-            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      {children}
-    </label>
-  )
-}
 
 function Record({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'slate' | 'rose' }) {
   const tones = {
