@@ -48,6 +48,40 @@ season is running cleanly.
 - [ ] **~Sat 22 Aug — confirm Premier League (`E0`) too.** PL starts a week
       after the EFL, so `E0` legitimately keeps 404ing until then.
 
+## What actually bit (2026-08-19)
+
+**A stale cached season index — the trap none of the checks above covered.**
+`matchday` exited 1 every morning from 18 Aug, popping the failure dialog. The
+watchdog reported *"remaining fixtures likely unmatched on FBref"*, which was a
+guess and wrong. The real error, buried in `backfill.log`, was:
+
+```
+File "soccerdata/fbref.py", line 237, in read_seasons
+    return df.loc[(slice(None), self.seasons), ["format", "url"]]
+KeyError: '2627'
+```
+
+soccerdata caches `~/soccerdata/data/FBref/seasons_<league>.html`. Ours were
+taken in the off-season (22 Jun – 1 Jul) and their newest entry was **2025-2026**,
+so no FBref read could resolve `2627` at all. Affected Premier League,
+Championship, FA Cup and EFL Cup; Champions League was already fine because UEFA
+publishes next season earlier.
+
+Fixed by moving the four stale files aside so soccerdata re-fetched them (~25s
+each). Verified after: `read_seasons` returns `['2627']` and `read_schedule`
+returns 552 rows. Cost: 5 days of Championship player data, recovered.
+
+**Do this at every rollover** — it is now step 4 in CLAUDE.md's checklist. Check
+any league before its first match day with:
+
+```bash
+grep -oE "20[0-9]{2}-20[0-9]{2}" "~/soccerdata/data/FBref/seasons_ENG-Championship.html" | sort -u | tail -1
+```
+
+A related trap: `test_stats.py::test_season_window_filters_to_chosen_seasons_and_ignores_n`
+picked the newest season and asserted it had >1 game, which is false in the
+opening rounds — it now picks the newest season with more than one game.
+
 ## Two failure modes that now announce themselves
 
 Both used to be silent; since commit `49d9a2e` neither can pass unnoticed.

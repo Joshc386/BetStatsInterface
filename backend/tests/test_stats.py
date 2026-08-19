@@ -79,10 +79,15 @@ def test_season_window_filters_to_chosen_seasons_and_ignores_n():
     s = SessionLocal()
     try:
         tid = _a_team_with_data(s)
-        # pick the most-recent season this team has league rows in
+        # Most-recent season with MORE THAN ONE league game. The point of this
+        # test is that n=1 does not clamp, which needs a season of >1 game to
+        # demonstrate -- and in the opening rounds of a new season the newest
+        # tag has exactly one, so picking it blindly fails every August.
         season = s.scalar(
             select(TeamMatch.season)
             .where(TeamMatch.team_id == tid, TeamMatch.competition_type == "club_league")
+            .group_by(TeamMatch.season)
+            .having(func.count() > 1)
             .order_by(TeamMatch.season.desc()).limit(1)
         )
         res = entity_summary(s, entity="team", entity_id=tid, metric="corners",

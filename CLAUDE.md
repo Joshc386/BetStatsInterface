@@ -181,6 +181,17 @@ python -m venv .venv
 #      (it is season-driven, not hardcoded) before any cup tie is filtered.
 #   3. New foreign clubs in Europe trip the fail-loud alias guard by design:
 #      add the alias + re-run, not a bug (see memory cups-internationals-sourcing).
+#   4. REFRESH THE CACHED SEASON INDEX -- the once-a-year trap. soccerdata caches
+#      ~/soccerdata/data/FBref/seasons_<league>.html, and a copy taken in the
+#      off-season does NOT list the new season, so EVERY FBref read dies with
+#      KeyError('<season>') until it is refreshed. It presents as matchday
+#      exiting 1 daily. Fix = delete the stale file(s) and re-run supervised so
+#      soccerdata re-fetches; ~25s per league:
+#        rm "~/soccerdata/data/FBref/seasons_ENG-Premier League.html"   (+ Championship,
+#        FA Cup, EFL Cup -- check each with: grep -oE "20[0-9]{2}-20[0-9]{2}" <file> | tail -1)
+#      This is a DELIBERATE exception to "never re-request a cached page": the
+#      page is stale, not valid. European comps are usually already fine (UEFA
+#      publishes earlier). Hit 2026-08-19; cost 5 days of Championship data.
 ```
 
 ---

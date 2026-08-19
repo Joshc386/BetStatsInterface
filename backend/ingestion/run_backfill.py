@@ -22,6 +22,7 @@ Run (VPN OFF):  python -m ingestion.run_backfill 2526 "Premier League"
 from __future__ import annotations
 
 import ctypes
+import re
 import subprocess
 import sys
 import time
@@ -96,6 +97,27 @@ def _kill(proc: subprocess.Popen) -> None:
         ["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True
     )
     subprocess.run(["taskkill", "/F", "/IM", "uc_driver.exe"], capture_output=True)
+
+
+def _last_error(max_bytes: int = 20_000) -> str | None:
+    """The child's final exception line, read from the tail of backfill.log.
+
+    The watchdog only sees an exit code; the reason lives in the child's log.
+    Surfacing it turns "no progress" into an actionable message.
+    """
+    try:
+        with _LOG.open("rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - max_bytes))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    hits = [
+        line.strip()
+        for line in tail.splitlines()
+        if re.match(r"^[A-Za-z_][\w.]*(Error|Exception)[:\s]", line.strip())
+    ]
+    return hits[-1] if hits else None
 
 
 def run(season: str = "2526", competition_name: str = "Premier League") -> int:
@@ -271,12 +293,28 @@ def _run(season: str, competition_name: str) -> int:
 
         time.sleep(3)
         new_pending = _pending(season, competition_name)
-        # A clean exit that made no progress means the remaining fixtures have no
-        # fetchable FBref match — don't spin restarts on them.
+        # No progress: stop rather than spin restarts. Why it made no progress
+        # is the part worth reporting accurately.
         if not stalled and new_pending >= pending:
-            print(f"[watchdog] clean exit, no progress ({new_pending} still pending) "
-                  "— remaining fixtures likely unmatched on FBref; stopping.",
-                  flush=True)
+            # Distinguish "nothing left that FBref can serve" from "the child
+            # crashed": both leave pending unchanged, but only one is benign.
+            # Guessing the benign one hid a KeyError('2627') -- a stale season
+            # index at the season boundary -- behind a plausible-sounding
+            # message for days.
+            if proc.returncode != 0:
+                print(
+                    f"[watchdog] backfill FAILED (exit {proc.returncode}), "
+                    f"{new_pending} still pending; stopping. "
+                    f"Last error: {_last_error() or 'see backfill.log'}",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[watchdog] clean exit, no progress ({new_pending} still "
+                    "pending) — those fixtures have no fetchable FBref match; "
+                    "stopping.",
+                    flush=True,
+                )
             return 1
         pending = new_pending
 
