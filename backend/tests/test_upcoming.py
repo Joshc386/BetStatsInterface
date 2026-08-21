@@ -17,12 +17,15 @@ from app.models.facts import Fixture
 from app.models.reference import Competition, Team
 from ingestion.upcoming import (
     ESPN_LEAGUES,
+    FINISHED_STATUSES,
     UnknownEspnTeamError,
     parse_scoreboard,
     purge_stale_international_placeholders,
     resolve_espn_team,
     season_for,
-    upsert_scheduled,
+    scoreboard_window,
+    select_cup_events,
+    upsert_event,
 )
 
 SAMPLE = json.loads(
@@ -51,11 +54,18 @@ def test_season_for_rolls_in_july():
     assert season_for(dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)) == "2627"
 
 
-def test_espn_leagues_cover_the_four_tiers_plus_world_cup():
+def test_espn_leagues_cover_the_four_tiers_world_cup_and_the_domestic_cups():
     assert set(ESPN_LEAGUES) == {
         "Premier League", "Championship", "League One", "League Two",
-        "World Cup",
+        "World Cup", "FA Cup", "EFL Cup",
     }
+
+
+def test_domestic_cups_are_ingested_last():
+    """Blast radius: an unresolved name rolls back its own competition and
+    raises, so the cups — the only slate with a long tail of unfamiliar
+    non-league clubs — must come after every league has committed."""
+    assert list(ESPN_LEAGUES)[-2:] == ["FA Cup", "EFL Cup"]
 
 
 def _wc_event(home: tuple[str, str, str], away: tuple[str, str, str],
@@ -131,7 +141,7 @@ def test_upsert_scheduled_creates_then_updates_never_demotes():
         home, away = teams[0], teams[1]
         d1 = dt.datetime(2026, 8, 21, 19, 0, tzinfo=dt.timezone.utc)
 
-        assert upsert_scheduled(session, comp, home.id, away.id, d1) == "created"
+        assert upsert_event(session, comp, home.id, away.id, d1) == "created"
         fx = session.scalars(
             select(Fixture).where(
                 Fixture.competition_id == comp.id,
@@ -143,13 +153,13 @@ def test_upsert_scheduled_creates_then_updates_never_demotes():
         assert fx.status == "scheduled" and fx.date == d1
 
         d2 = d1 + dt.timedelta(days=1, hours=-3)  # TV reshuffle
-        assert upsert_scheduled(session, comp, home.id, away.id, d2) == "updated"
+        assert upsert_event(session, comp, home.id, away.id, d2) == "updated"
         session.refresh(fx)
         assert fx.date == d2 and fx.status == "scheduled"
 
         fx.status = "finished"
         session.flush()
-        assert upsert_scheduled(session, comp, home.id, away.id, d1) == "skipped_finished"
+        assert upsert_event(session, comp, home.id, away.id, d1) == "skipped_finished"
         session.refresh(fx)
         assert fx.status == "finished" and fx.date == d2  # untouched
 
@@ -177,7 +187,7 @@ def test_upsert_scheduled_international_uses_august_season_and_ignores_finished(
         ))
         session.flush()
 
-        assert upsert_scheduled(session, comp, home.id, away.id, d) == "created"
+        assert upsert_event(session, comp, home.id, away.id, d) == "created"
         placeholder = session.scalars(
             select(Fixture).where(
                 Fixture.competition_id == comp.id,
@@ -223,3 +233,130 @@ def test_purge_removes_only_past_scheduled_internationals():
         ).all()
         assert {f.id for f in remaining} == {future.id, finished.id}
         session.rollback()
+
+
+# --- cup slate: finished events + covered-tie filter (ADR 0012) ------------
+# Cups have no football-data.co.uk feed, so nothing marks a cup tie played and
+# matchday's pending probe was structurally blind. ESPN supplies that signal.
+
+
+def test_finished_statuses_cover_extra_time_and_penalties():
+    """Cups are exactly where 90 minutes is not the end. The 2026-08-21 spike
+    found all three of these in a single EFL Cup window; matching only
+    STATUS_FINAL would miss every tie that went past full time."""
+    assert {
+        "STATUS_FULL_TIME",
+        "STATUS_FINAL_AET",
+        "STATUS_FINAL_PEN",
+    } <= FINISHED_STATUSES
+
+
+def test_parse_scoreboard_ignores_finished_events_by_default():
+    """Unchanged for leagues: fd.co.uk owns their results, not ESPN."""
+    assert all(not e.finished for e in parse_scoreboard(SAMPLE))
+    assert len(parse_scoreboard(SAMPLE)) == 2
+
+
+def test_parse_scoreboard_includes_finished_when_asked():
+    """3 events in the sample: 2 scheduled + 1 STATUS_FULL_TIME."""
+    events = parse_scoreboard(SAMPLE, include_finished=True)
+    assert len(events) == 3
+    played = [e for e in events if e.finished]
+    assert len(played) == 1
+    assert played[0].home_names[0] == "Everton"
+    assert played[0].date == dt.datetime(2026, 8, 15, 14, 0, tzinfo=dt.timezone.utc)
+
+
+def test_upsert_event_creates_a_finished_cup_tie():
+    """A cup tie already played when first seen is created finished outright —
+    there was never a scheduled row to promote."""
+    with SessionLocal() as session:
+        comp = session.scalar(select(Competition).where(Competition.name == "FA Cup"))
+        home, away = session.scalars(select(Team).limit(2)).all()
+        date = dt.datetime(2099, 1, 10, 15, 0, tzinfo=dt.timezone.utc)
+
+        assert upsert_event(session, comp, home.id, away.id, date, finished=True) == "created"
+
+        fixture = session.scalar(
+            select(Fixture).where(
+                Fixture.competition_id == comp.id,
+                Fixture.home_team_id == home.id,
+                Fixture.away_team_id == away.id,
+                Fixture.season == "9899",
+            )
+        )
+        assert fixture.status == "finished"
+        session.rollback()
+
+
+def test_upsert_event_promotes_a_scheduled_cup_tie_once_played():
+    """The reuse-in-place path: domestic cups key on stage='', the same key
+    cups.get_or_create_cup_fixture uses, so one row serves both sources."""
+    with SessionLocal() as session:
+        comp = session.scalar(select(Competition).where(Competition.name == "EFL Cup"))
+        home, away = session.scalars(select(Team).limit(2)).all()
+        date = dt.datetime(2099, 8, 12, 18, 45, tzinfo=dt.timezone.utc)
+
+        assert upsert_event(session, comp, home.id, away.id, date) == "created"
+        assert upsert_event(session, comp, home.id, away.id, date, finished=True) == "finished"
+
+        rows = session.scalars(
+            select(Fixture).where(
+                Fixture.competition_id == comp.id,
+                Fixture.home_team_id == home.id,
+                Fixture.away_team_id == away.id,
+                Fixture.season == season_for(date),
+            )
+        ).all()
+        assert len(rows) == 1 and rows[0].status == "finished"
+        session.rollback()
+
+
+def test_select_cup_events_keeps_only_covered_ties():
+    """ESPN serves every tie in the competition, including the non-league early
+    rounds. Only ties with a covered club are ours; the rest are dropped without
+    resolving the opponent, so an unfamiliar club is never alias work."""
+    from ingestion.cups import covered_team_ids
+    from ingestion.upcoming import ScheduledEvent
+
+    with SessionLocal() as session:
+        covered = covered_team_ids(session, "2526")
+        covered_team = session.scalar(select(Team).where(Team.id.in_(covered)))
+        outsider = session.scalar(select(Team).where(Team.id.notin_(covered)))
+        date = dt.datetime(2099, 1, 10, 15, 0, tzinfo=dt.timezone.utc)
+
+        def event(home, away):
+            return ScheduledEvent(
+                date=date,
+                home_espn_id=str(home.espn_id or f"x{home.id}"),
+                away_espn_id=str(away.espn_id or f"x{away.id}"),
+                home_names=(home.canonical_name, home.canonical_name),
+                away_names=(away.canonical_name, away.canonical_name),
+                finished=True,
+            )
+
+        keep, unresolved = select_cup_events(
+            session, [event(covered_team, outsider), event(outsider, outsider)], "2526"
+        )
+
+        assert len(keep) == 1
+        assert keep[0][0].home_names[0] == covered_team.canonical_name
+        assert unresolved == []
+        session.rollback()
+
+
+def test_cup_window_reaches_backwards_league_window_does_not():
+    """A played tie is in the PAST. A forward-only window steps straight over a
+    tie played at 19:45 the evening before the 08:00 run, so the cup slate would
+    never once observe it finished — the whole point of reading it."""
+    today = dt.date(2026, 8, 21)
+
+    league_start, league_end = scoreboard_window(today, 45, is_cup=False)
+    assert league_start == today
+    assert league_end == dt.date(2026, 10, 5)
+
+    cup_start, cup_end = scoreboard_window(today, 45, is_cup=True)
+    assert cup_start < today
+    assert cup_end == league_end
+    # yesterday's tie must be inside the window
+    assert cup_start <= today - dt.timedelta(days=1)
