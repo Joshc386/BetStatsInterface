@@ -17,6 +17,7 @@ from ingestion.cups import (
     _already_ingested,
     _guard_token,
     _team_stat_totals,
+    covered_divergence,
     covered_team_ids,
     get_or_create_cup_fixture,
     pair_team_ids,
@@ -548,3 +549,104 @@ def test_select_covered_games_carries_stage_and_strips_codes():
         assert game["away_name"] == "__ZZ Fremmed__"
         assert game["home_country"] == "England"
         assert game["away_country"] == "Denmark"
+
+
+# --- covered-set union (ADR 0012) -----------------------------------------
+# The covered set used to come from team_match alone, i.e. from
+# football-data.co.uk. When that source stalls the set silently empties and real
+# cup ties are ruled out of scope with nothing logged (observed 2026-08: with E0
+# unpublished, no Premier League club was covered for 2627). It is now the union
+# of team_match- and fixture-sourced clubs, with divergence reported.
+
+
+def _synthetic_covered_fixture(session, season: str):
+    """A PL fixture in `season` between two teams that have NO team_match rows.
+
+    Synthetic rather than reading the live E0 outage, so these tests keep
+    passing once football-data.co.uk publishes again.
+    """
+    comp = session.scalar(
+        select(Competition).where(Competition.name == "Premier League")
+    )
+    home, away = session.scalars(select(Team).limit(2)).all()
+    session.add(
+        Fixture(
+            competition_id=comp.id,
+            season=season,
+            date=dt.datetime(2099, 8, 1, tzinfo=dt.timezone.utc),
+            home_team_id=home.id,
+            away_team_id=away.id,
+            status="scheduled",
+            stage="",
+        )
+    )
+    session.flush()
+    return comp, home, away
+
+
+def test_covered_team_ids_includes_fixture_sourced_clubs():
+    """A club with a PL fixture but no team_match row that season IS covered.
+
+    This is the outage case: fd.co.uk has published nothing, so team_match is
+    empty, but the ESPN-sourced fixture proves the club is in the division.
+    """
+    season = "9899"  # a season with no real data of any kind
+    with SessionLocal() as session:
+        assert covered_team_ids(session, season) == set()
+        _comp, home, away = _synthetic_covered_fixture(session, season)
+
+        covered = covered_team_ids(session, season)
+
+        assert {home.id, away.id} <= covered
+        session.rollback()
+
+
+def test_covered_team_ids_historical_seasons_unchanged():
+    """The union is a no-op on a fully-ingested season: wherever team_match
+    rows exist, fixtures exist too, so nothing new is pulled into scope."""
+    season = "2425"
+    with SessionLocal() as session:
+        from_team_match = set(
+            session.scalars(
+                select(TeamMatch.team_id)
+                .join(Competition, Competition.id == TeamMatch.competition_id)
+                .where(
+                    TeamMatch.season == season,
+                    Competition.name.in_(["Premier League", "Championship"]),
+                )
+            )
+        )
+        assert covered_team_ids(session, season) == from_team_match
+
+
+def test_covered_divergence_names_the_stalled_source():
+    """Divergence reports the competition and both counts, so a source outage
+    is visible rather than absorbed into a silently smaller covered set."""
+    season = "9899"
+    with SessionLocal() as session:
+        assert covered_divergence(session, season) == {}
+        _synthetic_covered_fixture(session, season)
+
+        divergence = covered_divergence(session, season)
+
+        assert "Premier League" in divergence
+        team_match_n, fixture_n = divergence["Premier League"]
+        assert team_match_n == 0 and fixture_n == 2
+        session.rollback()
+
+
+def test_covered_team_ids_logs_divergence_when_given_a_log():
+    """The log line names the competition and both counts; a run with no
+    divergence stays silent."""
+    season = "9899"
+    with SessionLocal() as session:
+        lines: list[str] = []
+        covered_team_ids(session, season, log=lines.append)
+        assert lines == []
+
+        _synthetic_covered_fixture(session, season)
+        covered_team_ids(session, season, log=lines.append)
+
+        assert len(lines) == 1
+        assert "Premier League" in lines[0]
+        session.rollback()

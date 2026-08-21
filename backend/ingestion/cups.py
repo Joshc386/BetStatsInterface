@@ -48,28 +48,73 @@ from ingestion.players import (
     parse_team_ids,
 )
 
-# A cup tie is "covered" when a side plays in one of these that season. Decided
-# from team_match league rows (season-aware), so a relegated club stops dragging
-# its cup ties in once it leaves the tracked top two.
+# A cup tie is "covered" when a side plays in one of these that season
+# (season-aware, so a relegated club stops dragging its cup ties in once it
+# leaves the tracked top two).
 COVERED_COMPETITIONS = ("Premier League", "Championship")
 
 
-def covered_team_ids(session: Session, season: str) -> set[int]:
-    """Team ids with a Premier League / Championship team_match row this season.
-
-    These are the clubs whose cup ties are in scope; either side being covered
-    pulls the tie in (and the opponent's players come along as a coverage bonus).
-    """
+def _team_match_clubs(session: Session, season: str, competition: str) -> set[int]:
+    """Clubs with a team_match row in this competition-season (football-data.co.uk)."""
     return set(
         session.scalars(
             select(TeamMatch.team_id)
             .join(Competition, Competition.id == TeamMatch.competition_id)
-            .where(
-                TeamMatch.season == season,
-                Competition.name.in_(COVERED_COMPETITIONS),
-            )
+            .where(TeamMatch.season == season, Competition.name == competition)
         )
     )
+
+
+def _fixture_clubs(session: Session, season: str, competition: str) -> set[int]:
+    """Clubs appearing in this competition-season's fixtures (ESPN + ingest)."""
+    rows = session.execute(
+        select(Fixture.home_team_id, Fixture.away_team_id)
+        .join(Competition, Competition.id == Fixture.competition_id)
+        .where(Fixture.season == season, Competition.name == competition)
+    ).all()
+    return {team_id for row in rows for team_id in row}
+
+
+def covered_divergence(session: Session, season: str) -> dict[str, tuple[int, int]]:
+    """Competitions whose two covered-set sources disagree -> (team_match, fixtures).
+
+    Disagreement is the signature of a source outage, so it is reported rather
+    than absorbed. Empty dict when both sources agree everywhere.
+    """
+    divergent = {}
+    for competition in COVERED_COMPETITIONS:
+        from_team_match = _team_match_clubs(session, season, competition)
+        from_fixtures = _fixture_clubs(session, season, competition)
+        if from_team_match != from_fixtures:
+            divergent[competition] = (len(from_team_match), len(from_fixtures))
+    return divergent
+
+
+def covered_team_ids(session: Session, season: str, *, log=None) -> set[int]:
+    """Team ids playing Premier League / Championship football this season.
+
+    These are the clubs whose cup ties are in scope; either side being covered
+    pulls the tie in (and the opponent's players come along as a coverage bonus).
+
+    Sourced from the UNION of team_match and fixtures rows (ADR 0012). team_match
+    alone means football-data.co.uk alone, and an outage there silently empties
+    the covered set — ruling real ties out of scope with nothing logged (observed
+    2026-08: with E0 unpublished, no Premier League club was covered for 2627,
+    while the ESPN-sourced fixtures held all 20). Historically the union is a
+    no-op: wherever team_match rows exist, fixtures do too. Pass ``log`` to have
+    a divergence between the two sources reported.
+    """
+    covered: set[int] = set()
+    for competition in COVERED_COMPETITIONS:
+        covered |= _team_match_clubs(session, season, competition)
+        covered |= _fixture_clubs(session, season, competition)
+    if log is not None:
+        for competition, (n_tm, n_fx) in covered_divergence(session, season).items():
+            log(
+                f"[covered] {competition} {season}: {n_tm} clubs from team_match "
+                f"vs {n_fx} from fixtures - source divergence"
+            )
+    return covered
 
 
 # Names the cup path may auto-create even though an existing team shares their
