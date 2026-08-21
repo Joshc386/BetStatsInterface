@@ -2,6 +2,7 @@
 rem Daily upcoming-fixtures refresh (ADR 0009) — registered in Windows Task
 rem Scheduler as "BetStats upcoming fixtures". Appends to logs\upcoming.log;
 rem a non-zero exit (e.g. unknown ESPN team name -> alias work) shows there.
+rem Battery conditions OFF on the task (2026-08-21) - see run_matchday.cmd.
 cd /d "%~dp0"
 if not exist logs mkdir logs
 echo [%date% %time%] ingestion.upcoming start >> logs\upcoming.log

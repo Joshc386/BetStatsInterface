@@ -4,6 +4,7 @@ rem Windows Task Scheduler alongside "BetStats upcoming fixtures" (StartWhenAvai
 rem so a missed night catches up). Refreshes current-season league team data
 rem (football-data.co.uk) + points deductions (ESPN). PLAYER data is the
 rem SUPERVISED tier (ingestion.matchday) and is NOT run here. Idempotent.
+rem Battery conditions OFF on the task (2026-08-21) - see run_matchday.cmd.
 cd /d "%~dp0"
 if not exist logs mkdir logs
 set PYTHONIOENCODING=utf-8

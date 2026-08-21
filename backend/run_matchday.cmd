@@ -5,6 +5,10 @@ rem Cloudflare stalls (kill + fresh session), so this is safe to run unattended.
 rem Registered in Task Scheduler as "BetStats matchday" (daily 08:00, interactive
 rem logon so the headful browser can render). PYTHONIOENCODING=utf-8 so foreign
 rem (European) club names don't crash cp1252.
+rem Battery conditions are OFF on the task (2026-08-21): this is a laptop, and
+rem the Task Scheduler defaults skipped the run whenever it was unplugged -
+rem silently, since nothing FAILED - and killed a run mid-scrape on unplug. The
+rem backfill commits per match and is resumable, so battery running costs nothing.
 rem
 rem   run_matchday.cmd                          -> current-season leagues w/ pending work
 rem   run_matchday.cmd "FA Cup" "Champions League"  -> exactly those (a cup round)
