@@ -130,6 +130,13 @@ python -m venv .venv
 
 # upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; idempotent)
 .venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
+# ALSO CARRIES THE DOMESTIC CUPS (ADR 0012). FA/EFL Cup take FINISHED events too
+# ("finished" is a SET: STATUS_FULL_TIME / _FINAL_PEN / _FINAL_AET — cups go to
+# ET and pens), and their window reaches 30 days BACK, because a played tie is in
+# the past and a forward-only window steps straight over last night's game. That
+# finished row is what makes matchday able to SEE a cup round at all. Cups run
+# LAST and never roll back the slate on an unresolved name — they exit 1 instead.
+# Only Covered ties are kept, so the non-league early rounds are never alias work.
 # AUTOMATED: Windows Task Scheduler task "BetStats upcoming fixtures" runs
 # backend/run_upcoming.cmd daily 07:30 (catches up after missed starts) ->
 # backend/logs/upcoming.log — check that log first if the slate looks stale.
@@ -165,11 +172,20 @@ python -m venv .venv
 # (StartWhenAvailable) -> backend/logs/nightly.log. Idempotent; catch-up-safe.
 #
 # TIER 2 — SUPERVISED (FBref player data): headful, VPN OFF, machine awake, watchdog.
-.venv/Scripts/python.exe -m ingestion.matchday                       # current-season PL+Champ w/ pending work (default)
-.venv/Scripts/python.exe -m ingestion.matchday "FA Cup" "Champions League"  # a cup/European round, explicit
+.venv/Scripts/python.exe -m ingestion.matchday                       # EVERY comp w/ pending work (default)
+.venv/Scripts/python.exe -m ingestion.matchday "FA Cup" "Champions League"  # exactly these, order kept
 # (or run_matchday.cmd — sets PYTHONIOENCODING=utf-8 for foreign names). Wraps
 # run_backfill per comp, builds cup/European team rows (zero-network), then sweeps
 # uc_driver.exe orphans a clean exit leaks. UEFA Super Cup excluded (deferred).
+# ADR 0012: the default run is NO LONGER leagues-only — it ingests any cup or
+# European round that has been played. Pending work is found two ways: domestic
+# cups via the same zero-network DB probe the leagues use (their fixtures now
+# arrive from ESPN already finished), Europe via ESPN directly (signal only, no
+# rows written, main slugs only — never uefa.*_qual, which FBref does not carry).
+# A skipped tie now exits 1 -> notifier. A tie dropped on IDENTITY is not a skip:
+# FBref's cup schedule gives names only, and the non-league "Bournemouth"/
+# "Liverpool" read as the PL clubs, so coverage is re-checked against the match
+# page's real team ids and collisions are dropped quietly.
 #
 # SEASON ROLLOVER (do BEFORE the first 2627 match day):
 #   -> 2026-27 has a DATED working copy with steps 1-3 already checked off

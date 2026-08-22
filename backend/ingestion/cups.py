@@ -541,6 +541,22 @@ _CUP_TEAM_METRICS = [
 ]
 
 
+def exit_code(report: dict) -> int:
+    """1 when a tie was skipped, so an automated run alarms (ADR 0012).
+
+    This path swallows per-tie failures to keep a long backfill alive, and used
+    to exit 0 regardless — fine when a human was reading the output, invisible
+    once the run is unattended. A skip is a genuine failure (unresolvable team,
+    pairing failure, parse error) and needs a human.
+
+    Ties dropped on identity are NOT skips: nothing failed, the tie was simply
+    never ours, and counting them would alarm on every qualifying round.
+    Publication lag is not a skip either — select_covered_games drops schedule
+    rows with no game_id, so an unpublished match is never attempted.
+    """
+    return 1 if report.get("skipped") else 0
+
+
 def _int(value) -> int | None:
     """Coerce a SQL SUM (Decimal / None) to int or None."""
     return None if value is None else int(value)
@@ -714,7 +730,11 @@ if __name__ == "__main__":
         print(
             f"\n{report['cup']} {report['season']}: covered={report['covered_ties']} "
             f"fixtures={report['fixtures']} created_teams={report['created_teams']} "
+            f"uncovered={report.get('uncovered', 0)} "
             f"skipped={len(report['skipped'])}"
         )
     for s in report["skipped"][:20]:
         print("  skip:", s)
+    # Hand the failure up: the watchdog only sees an exit code, and matchday
+    # only sees the watchdog's. Without this a skipped tie dies in the log.
+    raise SystemExit(exit_code(report))

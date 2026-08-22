@@ -19,6 +19,7 @@ from ingestion.cups import (
     _team_stat_totals,
     covered_divergence,
     covered_fbref_ids,
+    exit_code,
     covered_team_ids,
     tie_is_covered,
     get_or_create_cup_fixture,
@@ -725,3 +726,21 @@ def test_tie_is_covered_accepts_a_genuine_covered_side():
         covered = covered_fbref_ids(session, "2526")
         real = next(iter(covered))
         assert tie_is_covered(session, (real, "4119b949"), "2526") is True
+
+
+def test_a_skipped_tie_exits_non_zero():
+    """The unattended run's only alarm. This path keeps a long backfill alive by
+    swallowing per-tie failures, and used to exit 0 regardless - so under
+    automation a missed tie was completely silent."""
+    assert exit_code({"skipped": ["abc123: UnknownTeamError: ..."]}) == 1
+
+
+def test_a_clean_run_exits_zero():
+    assert exit_code({"skipped": []}) == 0
+    assert exit_code({}) == 0
+
+
+def test_identity_drops_do_not_alarm():
+    """A tie that was never ours is not a failure. Alarming on it would fire
+    every qualifying round and train the reader to ignore the popup."""
+    assert exit_code({"skipped": [], "uncovered": 7}) == 0
