@@ -192,9 +192,9 @@ def team_squad_form(
     cap: int = Query(30, ge=1, le=100, description="max appearances per member"),
     session: Session = Depends(get_session),
 ) -> SquadForm:
-    """Raw rows for the Squad-form panel — the club's Recent squad plus each
-    member's last `cap` appearances at the club. The client filters scope and
-    aggregates the rows per player (docs/adr/0006)."""
+    """Raw rows for the Squad-form panel — the club's Squad plus each member's
+    last `cap` appearances at the club. The client filters scope and aggregates
+    the rows per player (docs/adr/0006, 0013)."""
     team = session.get(Team, team_id)
     if team is None:
         raise HTTPException(404, f"team {team_id} not found")
@@ -202,6 +202,7 @@ def team_squad_form(
     return SquadForm(
         team_id=team_id,
         team_name=team.canonical_name,
+        membership=data["membership"],
         members=[SquadMember.model_validate(m) for m in data["members"]],
         rows=[SquadAppearanceRow.model_validate(r) for r in data["rows"]],
     )

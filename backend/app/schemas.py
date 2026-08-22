@@ -95,13 +95,15 @@ class FixtureRow(BaseModel):
 
 
 class SquadMember(BaseModel):
-    """One member of a club's Recent squad (see docs/adr/0006)."""
+    """One member of a club's Squad (see docs/adr/0013)."""
 
     model_config = ConfigDict(from_attributes=True)
 
     player_id: int
     player: str
-    last_seen: dt.datetime  # his most-recent appearance; also the ghost-detector
+    # His most-recent appearance FOR THIS CLUB. None when we hold none — a new
+    # signing is in the Squad and unknown to us, which the panel shows as "—".
+    last_seen: dt.datetime | None = None
 
 
 class SquadAppearanceRow(BaseModel):
@@ -134,11 +136,15 @@ class SquadAppearanceRow(BaseModel):
 
 
 class SquadForm(BaseModel):
-    """A club's Recent squad plus each member's raw appearance rows at the club.
-    The client windows + aggregates the rows per player (docs/adr/0006)."""
+    """A club's Squad plus each member's raw appearance rows at the club.
+    The client windows + aggregates the rows per player (docs/adr/0006, 0013)."""
 
     team_id: int
     team_name: str
+    # "squad" = the ESPN roster ∪ the last 30 days; "recent" = the appearance-
+    # derived fallback, for a club with no roster. The panel labels itself from
+    # this rather than implying a registered squad it does not have.
+    membership: str
     members: list[SquadMember]
     rows: list[SquadAppearanceRow]
 
