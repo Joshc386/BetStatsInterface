@@ -18,7 +18,9 @@ from ingestion.cups import (
     _guard_token,
     _team_stat_totals,
     covered_divergence,
+    covered_fbref_ids,
     covered_team_ids,
+    tie_is_covered,
     get_or_create_cup_fixture,
     pair_team_ids,
     resolve_or_create_fbref_team,
@@ -417,13 +419,18 @@ def test_two_spelling_new_opponent_resolves_to_same_row():
     caption ('Dag & Red', which keys/auto-creates the row) and another in the
     per-match player df ('Dagenham & Redbridge'). Both must resolve to the SAME
     team via the alias — never fail-loud, else the tie AND the new team roll back
-    (the second half of the FA Cup 2024-25 drop). State-independent: holds whether
-    or not the row is already ingested. Rolled back."""
+    (the second half of the FA Cup 2024-25 drop). Rolled back.
+
+    The caption id used here is whatever the row actually holds. It used to be a
+    synthetic one, which since the identity guard simulates an impossible state:
+    a club stored with id X can only ever be captioned X by FBref, so a
+    conflicting id now means a DIFFERENT club and is refused by design."""
     from ingestion.players import resolve_fbref_team
 
     with SessionLocal() as session:
+        stored = session.scalar(select(Team).where(Team.canonical_name == "Dag & Red"))
         by_caption, _ = resolve_or_create_fbref_team(
-            session, "Dag & Red", fbref_id="zzdag_seam"
+            session, "Dag & Red", fbref_id=stored.fbref_id or "zzdag_seam"
         )
         # mirror ingest_match: name-only resolution of the player-df spelling
         by_player_df = resolve_fbref_team(session, "Dagenham & Redbridge")
@@ -650,3 +657,71 @@ def test_covered_team_ids_logs_divergence_when_given_a_log():
         assert len(lines) == 1
         assert "Premier League" in lines[0]
         session.rollback()
+
+
+# --- identity guard: an fbref_id outranks a name ---------------------------
+# FA Cup 2627 exposed this: the schedule's "Bournemouth" and "Liverpool" in an
+# August qualifying round are the non-league Bournemouth FC (c5b06e34) and AFC
+# Liverpool (e84ae6e6). The covered filter matched the PL clubs by NAME, then
+# the resolver's name fallback attached the tie to them - two fixtures claiming
+# Liverpool and Bournemouth played on 2026-08-08. They did not.
+
+
+def test_resolver_refuses_a_name_match_whose_fbref_id_conflicts():
+    """A stored club with a DIFFERENT fbref_id is a different club, whatever the
+    names say. Returning it silently is how the corruption happened."""
+    with SessionLocal() as session:
+        liverpool = session.scalar(
+            select(Team).where(Team.canonical_name == "Liverpool")
+        )
+        assert liverpool.fbref_id and liverpool.fbref_id != "e84ae6e6"
+
+        # "AFC Liverpool" normalises onto "Liverpool", but carries its own id
+        with pytest.raises(UnknownTeamError):
+            resolve_or_create_fbref_team(session, "AFC Liverpool", "e84ae6e6")
+
+        session.rollback()
+
+
+def test_resolver_still_attaches_the_seam_when_the_id_is_unknown():
+    """The legitimate case must keep working: a stored club with NO fbref_id
+    gets the id attached on a name match (that is the cross-source seam)."""
+    with SessionLocal() as session:
+        team = Team(canonical_name="Testville Rovers")
+        session.add(team)
+        session.flush()
+
+        resolved, created = resolve_or_create_fbref_team(
+            session, "Testville Rovers", "deadbeef"
+        )
+
+        assert created is False
+        assert resolved.id == team.id and resolved.fbref_id == "deadbeef"
+        session.rollback()
+
+
+def test_covered_fbref_ids_are_identities_not_names():
+    """The covered set expressed as fbref_ids, so coverage can be decided by
+    identity once the match page has been read."""
+    with SessionLocal() as session:
+        ids = covered_fbref_ids(session, "2526")
+        team_ids = covered_team_ids(session, "2526")
+        expected = {
+            t.fbref_id
+            for t in session.scalars(select(Team).where(Team.id.in_(team_ids)))
+            if t.fbref_id
+        }
+        assert ids == expected and len(ids) > 0
+
+
+def test_tie_is_covered_rejects_a_name_collision():
+    """Two non-league ids are not our tie, however their names read."""
+    with SessionLocal() as session:
+        assert tie_is_covered(session, ("c5b06e34", "4119b949"), "2526") is False
+
+
+def test_tie_is_covered_accepts_a_genuine_covered_side():
+    with SessionLocal() as session:
+        covered = covered_fbref_ids(session, "2526")
+        real = next(iter(covered))
+        assert tie_is_covered(session, (real, "4119b949"), "2526") is True

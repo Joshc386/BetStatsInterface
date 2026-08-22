@@ -54,6 +54,37 @@ from ingestion.players import (
 COVERED_COMPETITIONS = ("Premier League", "Championship")
 
 
+def covered_fbref_ids(session: Session, season: str) -> set[str]:
+    """The covered set as fbref_ids — identity rather than spelling.
+
+    ``covered_team_ids`` answers "which clubs are in scope"; this answers it in
+    the only currency the match page speaks. Needed because a cup SCHEDULE
+    carries names only, so a non-league club can read as a covered one.
+    """
+    team_ids = covered_team_ids(session, season)
+    return {
+        t.fbref_id
+        for t in session.scalars(select(Team).where(Team.id.in_(team_ids)))
+        if t.fbref_id
+    }
+
+
+def tie_is_covered(
+    session: Session, fbref_ids: tuple[str | None, str | None], season: str
+) -> bool:
+    """Is this tie genuinely ours, judged on the match page's own team ids?
+
+    ``select_covered_games`` can only match the schedule's NAMES, and names
+    collide: FBref's FA Cup schedule lists the non-league Bournemouth FC and AFC
+    Liverpool as "Bournemouth" and "Liverpool", which read exactly like the two
+    Premier League clubs. Re-checking once the match page has given us real ids
+    drops those ties before anything is written. Quiet by design — a collision
+    is not our tie at all, so alarming on it would fire every qualifying round.
+    """
+    covered = covered_fbref_ids(session, season)
+    return any(fid in covered for fid in fbref_ids if fid)
+
+
 def _team_match_clubs(session: Session, season: str, competition: str) -> set[int]:
     """Clubs with a team_match row in this competition-season (football-data.co.uk)."""
     return set(
@@ -197,8 +228,12 @@ def resolve_or_create_fbref_team(
 ) -> tuple[Team, bool]:
     """Resolve an FBref cup/European team to a canonical row, creating if new.
 
-    Id-first, then deterministic name/alias match (`match_existing_team`); on a
-    name match the fbref_id is attached (the seam link) so no duplicate is made.
+    Id-first, then deterministic name/alias match (`match_existing_team`) — but
+    ONLY onto a club whose own fbref_id is unset or identical. A stored club
+    carrying a different id is a different club however its name reads, and
+    returning it is silent corruption (FA Cup 2627: "AFC Liverpool" onto
+    Liverpool). On an accepted name match the fbref_id is attached (the seam
+    link) so no duplicate is made.
     Only when nothing matches is a new row created (auto-create + log, ADR 0008) —
     this is the one place this path diverges from the league fail-loud rule.
     Guard: creation is refused when an existing team shares the name's first
@@ -216,12 +251,16 @@ def resolve_or_create_fbref_team(
         return by_id, False
 
     existing = match_existing_team(session, fbref_name)
-    if existing is not None:
+    if existing is not None and existing.fbref_id in (None, "", fbref_id):
         if not existing.fbref_id:
             existing.fbref_id = fbref_id  # attach the seam handle
         if country and not existing.country:
             existing.country = country
         return existing, False
+    # A name match whose fbref_id CONTRADICTS the page is a different club, and
+    # returning it silently is how AFC Liverpool's cup tie was once recorded
+    # against Liverpool. Fall through: either this is a genuinely new club, or
+    # the guard token below stops and asks for a human decision.
 
     name = clean_name(fbref_name)
     if name not in CUP_CREATE_ALLOWLIST:
@@ -418,6 +457,7 @@ def backfill_cup_season(
         # Phase 1: create fixtures + teams from each covered game's match page.
         created_fixtures = 0
         created_teams = 0
+        uncovered = 0
         skipped: list[str] = []
         for game in games:
             game_id = game["game_id"]
@@ -434,6 +474,12 @@ def backfill_cup_season(
                 )
                 if not home_id or not away_id:
                     skipped.append(f"{game_id}: could not pair teams to ids")
+                    continue
+                if not tie_is_covered(session, (home_id, away_id), season):
+                    # The schedule name said covered, the page's ids say
+                    # otherwise — a collision, not our tie. Not a skip: nothing
+                    # failed, and counting it would alarm every qualifying round.
+                    uncovered += 1
                     continue
                 home, h_new = resolve_or_create_fbref_team(
                     session, game["home_name"], home_id, game.get("home_country")
@@ -467,12 +513,19 @@ def backfill_cup_season(
             if limit is not None and created_fixtures >= limit:
                 break
 
+        if uncovered:
+            log(
+                f"[{cup_name} {season}] {uncovered} tie(s) dropped on identity: "
+                "the schedule name read as a covered club, the match page's "
+                "team ids disagreed"
+            )
         return {
             "cup": cup_name,
             "season": season,
             "covered_ties": len(games),
             "fixtures": created_fixtures,
             "created_teams": created_teams,
+            "uncovered": uncovered,
             "skipped": skipped,
         }
 
