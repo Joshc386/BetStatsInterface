@@ -9,17 +9,19 @@ sweeps the ``uc_driver.exe`` orphans a clean backfill exit leaves behind (the
 watchdog only sweeps on stall/restart; clean exits leak — 59 seen after a chain
 day, each holding a Chrome window).
 
-Default (no args): the two leagues (Premier League, Championship) for the current
-season, and only those with pending work — the frequent case; play-offs fold in
-automatically via the watchdog. After a cup or European round, name the
-competitions explicitly:
+Default (no args): every competition with pending player work this season —
+the two leagues, plus any cup or European round that has been played and not yet
+fetched (ADR 0012). Play-offs fold in automatically via the watchdog. Naming
+competitions explicitly still runs exactly those, in the order given:
 
     python -m ingestion.matchday "FA Cup" "Champions League"
 
-Every run then reports any cup/European competition still holding unfetched
-player data for the current season, with the command to fetch it. The
-unattended task only ever ingests the two leagues, so without that line an
-unfetched cup round leaves a log identical to a day with no work at all.
+Pending work is found two ways, because the two scopes differ. Domestic cups now
+have ESPN-sourced fixture rows marked finished, so the same zero-network DB probe
+the leagues use works on them. European ties are never written by ESPN, so they
+are detected by asking ESPN directly whether a covered club played a tie we hold
+no fixture for. Anything still pending AFTER the run is reported — that is a
+genuine failure, not a quiet day.
 
 UEFA Super Cup is excluded (soccerdata's ``read_schedule`` crashes on its
 single-match page — ADR 0011); requesting it fails loud.
@@ -33,7 +35,7 @@ import datetime as dt
 import subprocess
 import sys
 
-from ingestion import cups, run_backfill
+from ingestion import cups, run_backfill, upcoming
 from ingestion.upcoming import season_for
 
 # Player competitions by ingestion path (see ingestion.run_backfill routing).
@@ -49,17 +51,23 @@ ALL_PLAYER_COMPETITIONS = LEAGUE_PLAYER_COMPETITIONS + CUP_PLAYER_COMPETITIONS
 
 
 def plan_competitions(
-    requested: list[str] | None, pending_leagues: set[str]
+    requested: list[str] | None,
+    pending_leagues: set[str],
+    pending_cups: set[str] = frozenset(),
 ) -> list[str]:
     """Resolve the ordered competition run-list (pure — no DB, no network).
 
-    ``requested`` None -> the leagues that have pending player work, in the fixed
-    PL-then-Championship order. An explicit list is validated against the
-    supported set (fail loud on a typo or the deferred Super Cup) and its order
-    is preserved — a cup evening runs exactly what you name.
+    ``requested`` None -> everything with pending player work, in canonical order:
+    the leagues first (PL then Championship, the frequent case), then any cup or
+    European competition that has been played and not yet fetched. An explicit
+    list is validated against the supported set (fail loud on a typo or the
+    deferred Super Cup) and its order is preserved — a cup evening runs exactly
+    what you name.
     """
     if requested is None:
-        return [c for c in LEAGUE_PLAYER_COMPETITIONS if c in pending_leagues]
+        return [c for c in LEAGUE_PLAYER_COMPETITIONS if c in pending_leagues] + [
+            c for c in CUP_PLAYER_COMPETITIONS if c in pending_cups
+        ]
     unknown = [c for c in requested if c not in ALL_PLAYER_COMPETITIONS]
     if unknown:
         raise ValueError(
@@ -76,16 +84,21 @@ def _sweep_orphans(log=print) -> None:
     log("[matchday] swept uc_driver.exe orphans")
 
 
-def manual_pending(season: str) -> dict[str, int]:
+def cup_pending(season: str) -> dict[str, int]:
     """Cup/European competitions holding finished-but-unfetched player data.
 
-    The unattended task runs with no args, so it only ever ingests the two
-    leagues — a cup round or European night needs an explicit request, and
-    nothing else would say so. Pure DB reads (``_pending``), no network.
+    Pure DB reads (``_pending``), no network. This used to be dead weight: cup
+    fixtures were created BY the ingest, so a tie never fetched had no row to
+    count and this could not fire (it never once did). Domestic cup fixtures now
+    arrive from ESPN already marked finished (ADR 0012), so the probe finally
+    sees them — the same zero-network signal the leagues have always had.
+
+    European ties are still not written by ESPN, so this only catches ones
+    PARTIALLY ingested; ``espn_pending`` finds the rest.
 
     Current season only, deliberately: a handful of older fixtures (minor-nation
-    qualifiers, a couple of one-offs) have no player data on FBref at all, and
-    reporting those forever would train the reader to skip the line.
+    qualifiers, a couple of one-offs) have no player data at all, and reporting
+    those forever would train the reader to skip the line.
     """
     return {
         comp: n
@@ -94,13 +107,32 @@ def manual_pending(season: str) -> dict[str, int]:
     }
 
 
-def _log_manual_pending(season: str, log) -> dict[str, int]:
-    """Report the work the unattended run will not do, with the command to do it."""
-    pending = manual_pending(season)
+def espn_pending(season: str, log=print) -> dict[str, int]:
+    """European competitions ESPN says have played, covered ties we do not hold.
+
+    The half ``cup_pending`` structurally cannot see: with no fixture row there
+    is nothing to probe. Costs one ESPN request per competition — no Cloudflare,
+    nothing written, and an outage degrades to "no signal" rather than failing
+    the run.
+    """
+    return upcoming.european_pending(season, log=log)
+
+
+def pending_cup_competitions(season: str, log=print) -> dict[str, int]:
+    """Every cup/European competition with player work outstanding, both sources."""
+    pending = cup_pending(season)
+    for comp, n in espn_pending(season, log=log).items():
+        pending[comp] = max(pending.get(comp, 0), n)
+    return pending
+
+
+def _log_still_pending(season: str, log) -> dict[str, int]:
+    """Report work still outstanding AFTER a run — a failure, not a quiet day."""
+    pending = cup_pending(season)
     if pending:
         detail = ", ".join(f"{comp} {n}" for comp, n in pending.items())
         args = " ".join(f'"{comp}"' for comp in pending)
-        log(f"[matchday] MANUAL RUN NEEDED — pending player data: {detail}")
+        log(f"[matchday] STILL PENDING after the run: {detail}")
         log(f"[matchday]   python -m ingestion.matchday {args}   (VPN OFF, headful)")
     return pending
 
@@ -121,22 +153,24 @@ def run_matchday(
 
     # Only the default (unnamed) run needs the pending-work probe; an explicit
     # request runs exactly what it names.
-    pending_leagues = (
-        {c for c in LEAGUE_PLAYER_COMPETITIONS if run_backfill._pending(season, c) > 0}
-        if competitions is None
-        else set()
-    )
-    plan = plan_competitions(competitions, pending_leagues)
+    if competitions is None:
+        pending_leagues = {
+            c
+            for c in LEAGUE_PLAYER_COMPETITIONS
+            if run_backfill._pending(season, c) > 0
+        }
+        pending_cups = set(pending_cup_competitions(season, log=log))
+    else:
+        pending_leagues, pending_cups = set(), set()
+    plan = plan_competitions(competitions, pending_leagues, pending_cups)
 
     if not plan:
-        log(f"[matchday] no pending league player data for {season}")
-        # The quiet-day case this matters most for — an unfetched cup round
-        # would otherwise leave a log identical to a day with genuinely no work.
+        log(f"[matchday] no pending player data for {season}")
         return {
             "season": season,
             "ran": [],
             "results": {},
-            "pending_manual": _log_manual_pending(season, log),
+            "pending_manual": {},
         }
 
     log(f"[matchday] {season}: refreshing {plan}")
@@ -157,7 +191,7 @@ def run_matchday(
         "season": season,
         "ran": plan,
         "results": results,
-        "pending_manual": _log_manual_pending(season, log),
+        "pending_manual": _log_still_pending(season, log),
     }
 
 

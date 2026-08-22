@@ -61,6 +61,27 @@ FINISHED_STATUSES = frozenset(
 # after a stretch with the machine off, at no extra cost — same single request.
 CUP_LOOKBACK_DAYS = 30
 
+# European competitions are DETECTED but never written (ADR 0012). Deliberately
+# separate from ESPN_LEAGUES: ESPN serves every tie including the
+# foreign-vs-foreign ones a Covered tie excludes, and European fixtures are keyed
+# by stage, which an ESPN row could never match. Writing them would mean alias
+# work for ~250 foreign clubs and a crop of ghost rows. Reading them costs one
+# request and cannot break anything.
+#
+# The MAIN competitions only — never the uefa.*_qual slugs. The FBref-sourced
+# European data contains no qualifying stage whatsoever, so a qualifying tie
+# would become pending work FBref can never satisfy: a daily alarm, forever.
+EUROPEAN_ESPN_SLUGS = {
+    "Champions League": "uefa.champions",
+    "Europa League": "uefa.europa",
+    "Conference League": "uefa.europa.conf",
+}
+
+# A tie is "the same tie" if a covered club played in this competition within a
+# day of the ESPN date. Kick-offs cross midnight UTC and the two sources do not
+# always agree on the calendar day, so an exact match would flag ties we hold.
+_SAME_TIE_WINDOW = dt.timedelta(days=1)
+
 # ESPN display/short name -> canonical team name, for first-contact matching
 # where normalisation alone cannot bridge the spelling. Deterministic, never
 # fuzzy. Extend when a run fails loud on a new name.
@@ -447,6 +468,77 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     if unresolved_cups:
         report["_unresolved_cups"] = unresolved_cups
     return report
+
+
+def european_pending_events(
+    session: Session,
+    competition: Competition,
+    events: list[ScheduledEvent],
+    season: str,
+) -> list[ScheduledEvent]:
+    """Played European ties involving a covered club that we hold no fixture for.
+
+    The whole European detection path, and it writes nothing. Only the covered
+    side is resolved — an unfamiliar foreign club is never looked up, so it can
+    never become alias work and can never block the run. A tie with no covered
+    club is not ours and is dropped in silence.
+    """
+    from ingestion.cups import covered_team_ids  # local: cups imports players
+
+    covered = covered_team_ids(session, season)
+    pending: list[ScheduledEvent] = []
+    for event in events:
+        if not event.finished:
+            continue
+        sides = [
+            _resolve_or_none(session, event.home_espn_id, event.home_names),
+            _resolve_or_none(session, event.away_espn_id, event.away_names),
+        ]
+        club = next((t for t in sides if t is not None and t.id in covered), None)
+        if club is None:
+            continue
+        held = session.scalars(
+            select(Fixture).where(
+                Fixture.competition_id == competition.id,
+                Fixture.season == season,
+                Fixture.date >= event.date - _SAME_TIE_WINDOW,
+                Fixture.date <= event.date + _SAME_TIE_WINDOW,
+                (Fixture.home_team_id == club.id) | (Fixture.away_team_id == club.id),
+            )
+        ).first()
+        if held is None:
+            pending.append(event)
+    return pending
+
+
+def european_pending(season: str, *, days: int = CUP_LOOKBACK_DAYS, log=print) -> dict:
+    """Per European competition, how many played covered ties we have not ingested.
+
+    One ESPN request per competition, no Cloudflare, nothing written. A failure
+    here is logged and treated as "no signal" rather than raised: the European
+    round is not worth taking the match-day run down for, and the next run
+    re-reads the same window anyway.
+    """
+    today = dt.date.today()
+    start = today - dt.timedelta(days=days)
+    pending: dict[str, int] = {}
+    for comp_name, slug in EUROPEAN_ESPN_SLUGS.items():
+        with SessionLocal() as session:
+            competition = session.scalars(
+                select(Competition).where(Competition.name == comp_name)
+            ).one()
+            try:
+                events = parse_scoreboard(
+                    fetch_scoreboard(slug, start, today), include_finished=True
+                )
+            except Exception as exc:  # ESPN 403/outage — no signal, not a failure
+                log(f"  [european] {comp_name}: ESPN unavailable ({exc}) - skipping")
+                continue
+            found = european_pending_events(session, competition, events, season)
+            if found:
+                pending[comp_name] = len(found)
+            session.rollback()  # first-contact espn_id stamping is not ours to keep
+    return pending
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ from ingestion.upcoming import (
     purge_stale_international_placeholders,
     resolve_espn_team,
     season_for,
+    EUROPEAN_ESPN_SLUGS,
+    european_pending_events,
     scoreboard_window,
     select_cup_events,
     upsert_event,
@@ -360,3 +362,121 @@ def test_cup_window_reaches_backwards_league_window_does_not():
     assert cup_end == league_end
     # yesterday's tie must be inside the window
     assert cup_start <= today - dt.timedelta(days=1)
+
+
+# --- European signal (ADR 0012): reads ESPN, writes NOTHING ----------------
+
+
+def test_european_slugs_are_the_main_competitions_never_qualifying():
+    """Qualifying is deliberately absent. The FBref-sourced European data holds
+    no qualifying stage at all across its 502 fixtures, so a qualifying tie
+    would be pending work FBref can never satisfy - alarming every day forever."""
+    assert set(EUROPEAN_ESPN_SLUGS.values()) == {
+        "uefa.champions", "uefa.europa", "uefa.europa.conf",
+    }
+    assert not any("qual" in slug for slug in EUROPEAN_ESPN_SLUGS.values())
+    # and the signal map must stay OUT of the row-writing map
+    assert not (set(EUROPEAN_ESPN_SLUGS) & set(ESPN_LEAGUES))
+
+
+def _european_event(home, away, date, finished=True):
+    from ingestion.upcoming import ScheduledEvent
+
+    return ScheduledEvent(
+        date=date,
+        home_espn_id=str(home.espn_id or f"x{home.id}"),
+        away_espn_id=str(away.espn_id or f"x{away.id}"),
+        home_names=(home.canonical_name, home.canonical_name),
+        away_names=(away.canonical_name, away.canonical_name),
+        finished=finished,
+    )
+
+
+def test_european_pending_ignores_ties_we_already_hold():
+    """A covered club's tie that is already ingested is not pending work."""
+    from ingestion.cups import covered_team_ids
+
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == "Champions League")
+        )
+        existing = session.scalars(
+            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+        ).one()
+        covered = covered_team_ids(session, existing.season)
+        if existing.home_team_id not in covered and existing.away_team_id not in covered:
+            pytest.skip("sample fixture has no covered side in its season")
+        home = session.get(Team, existing.home_team_id)
+        away = session.get(Team, existing.away_team_id)
+
+        pending = european_pending_events(
+            session, comp, [_european_event(home, away, existing.date)], existing.season
+        )
+
+        assert pending == []
+
+
+def test_european_pending_flags_a_covered_tie_we_do_not_hold():
+    """Same covered club, a date we hold nothing for -> pending work."""
+    from ingestion.cups import covered_team_ids
+
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == "Champions League")
+        )
+        existing = session.scalars(
+            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+        ).one()
+        covered = covered_team_ids(session, existing.season)
+        if existing.home_team_id not in covered and existing.away_team_id not in covered:
+            pytest.skip("sample fixture has no covered side in its season")
+        home = session.get(Team, existing.home_team_id)
+        away = session.get(Team, existing.away_team_id)
+        far_off = existing.date + dt.timedelta(days=900)
+
+        pending = european_pending_events(
+            session, comp, [_european_event(home, away, far_off)], existing.season
+        )
+
+        assert len(pending) == 1
+
+
+def test_european_pending_ignores_ties_with_no_covered_club():
+    """Foreign-vs-foreign is not ours, and must never become alias work."""
+    from ingestion.cups import covered_team_ids
+
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == "Champions League")
+        )
+        covered = covered_team_ids(session, "2526")
+        outsiders = session.scalars(
+            select(Team).where(Team.id.notin_(covered)).limit(2)
+        ).all()
+        date = dt.datetime(2099, 3, 1, tzinfo=dt.timezone.utc)
+
+        pending = european_pending_events(
+            session, comp, [_european_event(*outsiders, date)], "2526"
+        )
+
+        assert pending == []
+
+
+def test_european_pending_ignores_unfinished_events():
+    """A tie that has not been played is not pending ingestion work."""
+    from ingestion.cups import covered_team_ids
+
+    with SessionLocal() as session:
+        comp = session.scalar(
+            select(Competition).where(Competition.name == "Champions League")
+        )
+        covered = covered_team_ids(session, "2526")
+        team = session.scalar(select(Team).where(Team.id.in_(covered)))
+        other = session.scalar(select(Team).where(Team.id.notin_(covered)))
+        date = dt.datetime(2099, 3, 1, tzinfo=dt.timezone.utc)
+
+        pending = european_pending_events(
+            session, comp, [_european_event(team, other, date, finished=False)], "2526"
+        )
+
+        assert pending == []
