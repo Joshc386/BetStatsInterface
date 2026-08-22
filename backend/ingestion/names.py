@@ -35,3 +35,28 @@ def normalise_for_match(name: str) -> str:
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     tokens = [t for t in text.split() if t not in _CLUB_TOKENS]
     return " ".join(tokens)
+
+
+# Standalone letters that accent-folding cannot reach. NFKD decomposes a base
+# letter plus a combining mark (é -> e), but ð/ø/þ/ł are single characters with
+# no decomposition, so they survive normalise_for_match untouched. That is
+# exactly why the ESPN roster spike missed Andri Guðjohnsen and Lars-Jørgen
+# Salvesen (ADR 0013). Player names carry these far more often than club names,
+# so the fold is kept OUT of normalise_for_match — the team seam is working and
+# is not worth disturbing.
+_LETTER_FOLDS = str.maketrans(
+    {
+        "ð": "d", "Ð": "d", "þ": "th", "Þ": "th", "ø": "o", "Ø": "o",
+        "đ": "d", "Đ": "d", "ł": "l", "Ł": "l", "ß": "ss",
+        "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe", "ı": "i",
+    }
+)
+
+
+def normalise_player_name(name: str) -> str:
+    """Fold a player name to a deterministic seam-matching key.
+
+    normalise_for_match plus the standalone letters above. Matcher-only and
+    lossy, exactly like its base — never store the result as a display name.
+    """
+    return normalise_for_match(clean_name(name).translate(_LETTER_FOLDS))

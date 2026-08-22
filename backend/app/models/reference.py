@@ -60,6 +60,9 @@ class Player(Base):
     fbref_id: Mapped[str | None] = mapped_column(Text, unique=True)
     # Reserved for the deferred FotMob player-xG ingestion path (ADR 0001).
     fotmob_id: Mapped[str | None] = mapped_column(Text)
+    # Stamped by the roster job once a name resolves, so Squad membership never
+    # depends on spelling again (ADR 0013). Only the four English tiers get one.
+    espn_id: Mapped[str | None] = mapped_column(Text, index=True)
     current_team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id"))
     nationality: Mapped[str | None] = mapped_column(Text)
     position: Mapped[str | None] = mapped_column(Text)
