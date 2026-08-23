@@ -135,13 +135,15 @@ export interface TableRow {
   adjustment_note: string | null
 }
 
-// Squad-form panel — the club's Recent squad + each member's raw appearance rows
-// at the club, which the client windows + aggregates (mirrors backend SquadForm;
-// see docs/adr/0006). Membership = club of the player's most-recent appearance.
+// Squad-form panel — the club's Squad + each member's raw appearance rows at the
+// club, which the client windows + aggregates (mirrors backend SquadForm; see
+// docs/adr/0006 for the form maths, 0013 for membership).
 export interface SquadMember {
   player_id: number
   player: string
-  last_seen: string // his most-recent appearance; old date => likely a "ghost"
+  // His most-recent appearance FOR THIS CLUB, or null when we hold none — a new
+  // signing is in the Squad and unknown to us, which the panel renders as "—".
+  last_seen: string | null
 }
 
 export interface SquadAppearanceRow {
@@ -172,6 +174,10 @@ export interface SquadAppearanceRow {
 export interface SquadForm {
   team_id: number
   team_name: string
+  // Which rule produced `members`: 'squad' = the ESPN roster union the last 30
+  // days; 'recent' = the appearance-derived fallback for a club with no roster
+  // (docs/adr/0013). The panel labels itself from this.
+  membership: 'squad' | 'recent'
   members: SquadMember[]
   rows: SquadAppearanceRow[]
 }

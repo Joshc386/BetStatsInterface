@@ -1,10 +1,13 @@
-// Squad-form panel — a club's Recent squad (players whose most-recent appearance
-// was for that club) with each member's headline Summary Metric, computed
-// client-side from raw rows (docs/adr/0006). One reusable panel, mounted on the
-// Fixture view (both teams, shared controls) and the Team hub (one team).
+// Squad-form panel — a club's Squad with each member's headline Summary Metric,
+// computed client-side from raw rows (docs/adr/0006). One reusable panel, mounted
+// on the Fixture view (both teams, shared controls) and the Team hub (one team).
 //
-// Membership and the "ghost" caveat are appearance-derived: a member lingers if
-// his last game was here, so the panel is always labelled appearance-based.
+// Membership comes from the response's `membership` (docs/adr/0013): the ESPN
+// roster union the last 30 days, or the appearance-derived Recent squad fallback
+// for a club with no roster. The panel labels itself from it rather than
+// implying a registered squad it may not have. A Squad member we hold no
+// appearances for is shown with no figure and no date, sorted last — "in the
+// squad, nothing known" is different information from "not in the squad".
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -12,11 +15,13 @@ import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '.
 import { EntityLink, playerHref } from '../components/EntityLink'
 import { ControlBar, ControlGroup, Field, Toggle, ctrl } from '../components/controls'
 import { summarise, type MetricKind } from '../lib/aggregate'
+import { compareByFigure, membershipLabel } from '../lib/squadMembership'
 import { LastNInput } from '../components/LastNInput'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB')
+// null = a Squad member we hold no appearance for at this club (ADR 0013).
+const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-GB') : '—')
 
 
 interface MetricDef {
@@ -137,11 +142,11 @@ export function SquadControls({
 interface Computed {
   player_id: number
   player: string
-  last_seen: string
+  last_seen: string | null
   rows: SquadAppearanceRow[] // the window (last N at this club, in scope), newest-first
   figure: string
   apps: number
-  sortKey: number
+  sortKey: number | null // null = no figure ("—"); sorts last
 }
 
 /** One club's Squad-form panel: fetches its raw rows once, then computes each
@@ -201,11 +206,12 @@ export function SquadFormPanel({
         rows: window,
         apps: agg.games,
         figure: figureText(agg, def.kind, threshold),
-        // sort by the figure: hit-rate% when thresholded, else the per-app average.
-        sortKey: threshold !== undefined ? (agg.pct ?? -1) : (agg.average ?? -Infinity),
+        // sort by the figure: hit-rate% when thresholded, else the per-app
+        // average. Both are null on an empty window, which sorts the member last.
+        sortKey: threshold !== undefined ? agg.pct : agg.average,
       }
     })
-    rows.sort((a, b) => b.sortKey - a.sortKey)
+    rows.sort(compareByFigure)
     return rows
   }, [data, c.metric, c.n, c.scope, c.threshold, c.direction, c.minMinutes])
 
@@ -222,6 +228,7 @@ export function SquadFormPanel({
   // whose player data is cup-only (coverage is PL + Championship). Say why instead
   // of listing the whole squad at zero, which reads as broken data.
   const scopeLabel = SCOPES.find(([v]) => v === c.scope)?.[1] ?? 'this scope'
+  const membership = membershipLabel(data.membership, data.members.length)
   const emptyInScope =
     data.members.length > 0 &&
     !data.rows.some((r) => c.scope === 'all' || r.competition_type === c.scope)
@@ -230,11 +237,9 @@ export function SquadFormPanel({
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
       <div className="mb-1 flex items-baseline justify-between">
         <h3 className="font-medium text-slate-200">{data.team_name}</h3>
-        <span className="text-xs text-slate-500">{data.members.length} in recent squad</span>
+        <span className="text-xs text-slate-500">{membership.count}</span>
       </div>
-      <p className="mb-2 text-xs text-slate-600">
-        Based on recent appearances — not a registered roster. “Last seen” flags likely departures.
-      </p>
+      <p className="mb-2 text-xs text-slate-600">{membership.caption}</p>
       {data.members.length === 0 ? (
         <p className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-500">
           No appearances on record yet.
@@ -287,18 +292,29 @@ function PlayerRow({ p, metric }: { p: Computed; metric: string }) {
           <span className="w-20 shrink-0 text-right font-semibold text-slate-100">{p.figure}</span>
         </button>
       </div>
-      {open && <MiniBreakdown rows={p.rows} def={def} metric={metric} playerId={p.player_id} />}
+      {open && (
+        <MiniBreakdown
+          rows={p.rows}
+          def={def}
+          metric={metric}
+          playerId={p.player_id}
+          neverSeen={p.last_seen === null}
+        />
+      )}
     </div>
   )
 }
 
 function MiniBreakdown({
-  rows, def, metric, playerId,
+  rows, def, metric, playerId, neverSeen,
 }: {
   rows: SquadAppearanceRow[]
   def: MetricDef
   metric: string
   playerId: number
+  /** A Squad member we hold no appearance for at this club — "none in this
+   * scope" would wrongly imply he has some in another (ADR 0013). */
+  neverSeen: boolean
 }) {
   const cell = (v: number | boolean | null) =>
     v === null || v === undefined ? '—'
@@ -307,7 +323,11 @@ function MiniBreakdown({
   return (
     <div className="bg-slate-950/40 px-3 pb-2">
       {rows.length === 0 ? (
-        <p className="py-2 text-xs text-slate-600">No appearances in this scope.</p>
+        <p className="py-2 text-xs text-slate-600">
+          {neverSeen
+            ? 'In the squad; no appearances for this club on record.'
+            : 'No appearances in this scope.'}
+        </p>
       ) : (
         <table className="w-full border-collapse text-xs">
           <tbody>
