@@ -25,8 +25,11 @@ from ingestion.upcoming import (
     season_for,
     EUROPEAN_ESPN_SLUGS,
     european_pending_events,
+    postponed_pairs,
     scoreboard_window,
     select_cup_events,
+    stalled,
+    takes_finished,
     upsert_event,
 )
 
@@ -347,21 +350,38 @@ def test_select_cup_events_keeps_only_covered_ties():
         session.rollback()
 
 
-def test_cup_window_reaches_backwards_league_window_does_not():
-    """A played tie is in the PAST. A forward-only window steps straight over a
-    tie played at 19:45 the evening before the 08:00 run, so the cup slate would
-    never once observe it finished — the whole point of reading it."""
+def test_window_reaches_backwards_whenever_finished_events_are_taken():
+    """A played match is in the PAST. A forward-only window steps straight over a
+    match played at 19:45 the evening before the 08:00 run, so the slate would
+    never once observe it finished — the whole point of reading it.
+
+    Leagues need this as much as cups do (ADR 0014): before it, only
+    football-data.co.uk ever marked a league Fixture finished, so an unpublished
+    CSV silently withdrew the Fixture from FBref's player pipeline too."""
     today = dt.date(2026, 8, 21)
 
-    league_start, league_end = scoreboard_window(today, 45, is_cup=False)
-    assert league_start == today
-    assert league_end == dt.date(2026, 10, 5)
+    forward_start, forward_end = scoreboard_window(today, 45, lookback=False)
+    assert forward_start == today
+    assert forward_end == dt.date(2026, 10, 5)
 
-    cup_start, cup_end = scoreboard_window(today, 45, is_cup=True)
-    assert cup_start < today
-    assert cup_end == league_end
-    # yesterday's tie must be inside the window
-    assert cup_start <= today - dt.timedelta(days=1)
+    back_start, back_end = scoreboard_window(today, 45, lookback=True)
+    assert back_start < today
+    assert back_end == forward_end
+    # last night's match must be inside the window
+    assert back_start <= today - dt.timedelta(days=1)
+
+
+def test_leagues_and_cups_take_finished_events_internationals_never_do():
+    """The international exception is load-bearing, not an oversight.
+
+    ADR 0011 placeholders are ephemeral, and
+    `purge_stale_international_placeholders` deletes only *scheduled* past rows —
+    so a placeholder marked finished would never be purged and would linger as
+    exactly the ghost that function exists to prevent. Its real finished row
+    comes from the FBref ingest under a stage-qualified key."""
+    assert takes_finished("club_league") is True
+    assert takes_finished("club_cup") is True
+    assert takes_finished("international") is False
 
 
 # --- European signal (ADR 0012): reads ESPN, writes NOTHING ----------------
@@ -480,3 +500,57 @@ def test_european_pending_ignores_unfinished_events():
         )
 
         assert pending == []
+
+
+# --- plumbing backstop (ADR 0014) ------------------------------------------
+
+
+def _ev(home_id, away_id, status):
+    return {
+        "date": "2026-08-21T19:00Z",
+        "status": {"type": {"name": status}},
+        "competitions": [
+            {
+                "competitors": [
+                    {"homeAway": "home", "team": {"id": home_id, "displayName": "H",
+                                                  "shortDisplayName": "H"}},
+                    {"homeAway": "away", "team": {"id": away_id, "displayName": "A",
+                                                  "shortDisplayName": "A"}},
+                ]
+            }
+        ],
+    }
+
+
+def test_postponed_pairs_picks_out_only_called_off_events():
+    payload = {
+        "events": [
+            _ev("1", "2", "STATUS_POSTPONED"),
+            _ev("3", "4", "STATUS_FULL_TIME"),
+            _ev("5", "6", "STATUS_SCHEDULED"),
+            _ev("7", "8", "STATUS_ABANDONED"),
+        ]
+    }
+    assert postponed_pairs(payload) == {("1", "2"), ("7", "8")}
+
+
+NOW_STALL = dt.datetime(2026, 8, 23, 7, 30, tzinfo=dt.timezone.utc)
+
+
+def test_a_long_past_unmarked_fixture_is_stalled():
+    """The ADR 0014 failure itself: nothing marked it played, so the coverage
+    audit — which only looks at FINISHED fixtures — can never see it."""
+    played = NOW_STALL - dt.timedelta(days=2)
+    assert stalled([("1", "2", played)], set(), now=NOW_STALL) == [("1", "2", played)]
+
+
+def test_a_postponed_fixture_is_not_stalled():
+    """It genuinely was not played. `scheduled` is the correct status for it."""
+    called_off = NOW_STALL - dt.timedelta(days=2)
+    assert stalled([("1", "2", called_off)], {("1", "2")}, now=NOW_STALL) == []
+
+
+def test_last_nights_match_is_not_yet_stalled():
+    """The same run that sees it finished marks it — no alarm on the way past."""
+    last_night = NOW_STALL - dt.timedelta(hours=12)
+    assert stalled([("1", "2", last_night)], set(), now=NOW_STALL) == []

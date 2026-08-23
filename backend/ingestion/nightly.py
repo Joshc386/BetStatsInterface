@@ -27,7 +27,7 @@ from sqlalchemy import func, select
 from app.db import SessionLocal
 from app.models.facts import Fixture
 from app.models.reference import Competition
-from ingestion import points_adjustments, team_match
+from ingestion import coverage, points_adjustments, team_match
 from ingestion.upcoming import season_for
 
 # football-data.co.uk publishes a league's CSV only once that league has played,
@@ -73,7 +73,19 @@ def unexpected_skips(
     return unexpected
 
 
-def run_nightly(now: dt.datetime | None = None, log=print) -> dict:
+def _audit_team_coverage(now: dt.datetime, log) -> list[coverage.Gap]:
+    """This job owns football-data.co.uk, so it owns the alarm for its gaps
+    (ADR 0014). Opens its own session — nothing above holds one."""
+    with SessionLocal() as session:
+        overdue, _known = coverage.audit(
+            session, coverage.TEAM_FDCOUK, now=now, log=log
+        )
+    return overdue
+
+
+def run_nightly(
+    now: dt.datetime | None = None, log=print, audit=_audit_team_coverage
+) -> dict:
     """Refresh the current season's league team data + points deductions.
 
     ``now`` defaults to the wall clock; it is injectable so the season boundary
@@ -109,16 +121,40 @@ def run_nightly(now: dt.datetime | None = None, log=print) -> dict:
         log(f"[nightly]   DEGRADED points adjustments: {type(e).__name__}: {e} "
             f"— existing rulings kept, retrying next run")
 
-    # Last, so a dead source never costs us the points refresh above.
+    # Two different questions about the same source, both asked last so a dead
+    # source never costs us the points refresh above:
+    #
+    #   unexpected_skips — did the FETCH return anything at all for a league
+    #     that has kicked off? Catches a URL change or outage (the 2026-08 E0
+    #     HTTP 300) even before any Fixture is marked finished.
+    #   coverage.audit  — did the DATA arrive, per Fixture? Catches PARTIAL
+    #     publication, which the fetch check is structurally blind to: when
+    #     fd.co.uk published 12 of 23 Championship games there was no skip at
+    #     all, so the other 11 were invisible (ADR 0014).
+    #
+    # Kept as a pair deliberately — neither subsumes the other.
+    overdue = audit(now, log)
     broken = unexpected_skips(team["skipped"], first_kickoffs(season, now), now)
+
+    problems = []
     if broken:
-        raise RuntimeError(
+        problems.append(
             "football-data.co.uk returned nothing for league-season(s) already "
             "being played — source likely broken, not pre-season: "
             + "; ".join(broken)
         )
+    if overdue:
+        problems.append(
+            f"football-data.co.uk has not published {len(overdue)} played "
+            "fixture(s) past their grace period: "
+            + "; ".join(
+                f"{g.competition} {g.season} {g.date:%Y-%m-%d}" for g in overdue[:10]
+            )
+        )
+    if problems:
+        raise RuntimeError(" | ".join(problems))
 
-    return {"season": season, "team": team, "points": points}
+    return {"season": season, "team": team, "points": points, "overdue": overdue}
 
 
 if __name__ == "__main__":

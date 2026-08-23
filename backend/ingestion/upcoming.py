@@ -22,7 +22,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.db import SessionLocal
 from app.models.facts import Fixture
@@ -54,12 +54,48 @@ FINISHED_STATUSES = frozenset(
     {"STATUS_FULL_TIME", "STATUS_FINAL", "STATUS_FINAL_AET", "STATUS_FINAL_PEN"}
 )
 
-# How far BACK a cup slate looks. A played tie is in the past, and the forward
-# window every other competition uses would step straight over it: a tie played
-# at 19:45 is already outside a window starting the next morning, so the daily
-# run would never once see it finished. 30 days also lets the detection catch up
-# after a stretch with the machine off, at no extra cost — same single request.
-CUP_LOOKBACK_DAYS = 30
+# ESPN's "this did not happen (yet)" statuses. A match called off keeps its
+# original past date and stays `scheduled` — which is CORRECT under ADR 0014,
+# since `finished` means played — but is indistinguishable from "nothing marked
+# it finished", the failure that ADR exists to remove. Reading these tells the
+# two apart at no extra cost: the payload is already in hand.
+POSTPONED_STATUSES = frozenset(
+    {"STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_SUSPENDED", "STATUS_ABANDONED"}
+)
+
+# How long a played match may sit un-marked before it reads as broken plumbing.
+# One full daily cycle plus slack: a match played at 19:45 is marked by the very
+# next 07:30 run, so anything still scheduled a day later was not merely missed.
+STALLED_AFTER = dt.timedelta(hours=24)
+
+# How far BACK a slate looks. A played match is in the past, and a forward-only
+# window would step straight over it: a match played at 19:45 is already outside
+# a window starting the next morning, so the daily run would never once see it
+# finished. 30 days also lets detection catch up after a stretch with the machine
+# off, at no extra cost — same single request.
+#
+# Was cup-only until ADR 0014. Leagues need it for the same reason: without it
+# nothing but football-data.co.uk ever marked a league Fixture finished, so an
+# unpublished CSV withdrew the Fixture from FBref's player pipeline as well.
+LOOKBACK_DAYS = 30
+
+
+def takes_finished(competition_type: str) -> bool:
+    """Whether this competition's slate should read FINISHED events, not just
+    scheduled ones (ADR 0014).
+
+    True for club competitions: something has to mark a Fixture played, and for
+    leagues that used to be football-data.co.uk's job alone — a coupling that
+    silently stalled FBref ingestion whenever the CSV was late.
+
+    False for internationals, and that exception is load-bearing. ADR 0011's
+    placeholders are ephemeral: `purge_stale_international_placeholders` deletes
+    only *scheduled* past rows, so a placeholder marked finished would never be
+    purged and would linger as precisely the ghost that function exists to
+    prevent. Their real finished row comes from the FBref ingest, under a
+    stage-qualified key no feed row could match.
+    """
+    return competition_type != "international"
 
 # European competitions are DETECTED but never written (ADR 0012). Deliberately
 # separate from ESPN_LEAGUES: ESPN serves every tie including the
@@ -153,15 +189,16 @@ def fetch_scoreboard(slug: str, start: dt.date, end: dt.date) -> dict:
 
 
 def scoreboard_window(
-    today: dt.date, days: int, *, is_cup: bool
+    today: dt.date, days: int, *, lookback: bool
 ) -> tuple[dt.date, dt.date]:
-    """The date range to ask ESPN for. Cups reach backwards, leagues do not.
+    """The date range to ask ESPN for.
 
-    Leagues only ever want fixtures that have not happened yet — fd.co.uk owns
-    their results. A cup slate also has to notice ties that HAVE happened, and
-    those are behind us, never ahead.
+    Any slate that reads finished events has to reach backwards — a played match
+    is behind us, never ahead — so `lookback` tracks `takes_finished`. Only the
+    international slate, which wants unplayed placeholders and nothing else,
+    asks for the forward window alone.
     """
-    start = today - dt.timedelta(days=CUP_LOOKBACK_DAYS) if is_cup else today
+    start = today - dt.timedelta(days=LOOKBACK_DAYS) if lookback else today
     return start, today + dt.timedelta(days=days)
 
 
@@ -170,6 +207,46 @@ def _event_date(raw: str) -> dt.datetime:
     return dt.datetime.strptime(raw, "%Y-%m-%dT%H:%MZ").replace(
         tzinfo=dt.timezone.utc
     )
+
+
+def postponed_pairs(payload: dict) -> set[tuple[str, str]]:
+    """(home_espn_id, away_espn_id) for every called-off event in the payload.
+
+    Deliberately separate from `parse_scoreboard`, which returns matches we act
+    on. These are matches we must NOT act on, gathered only so a postponement is
+    not mistaken for the slate being broken.
+    """
+    out: set[tuple[str, str]] = set()
+    for event in payload.get("events", []):
+        if event["status"]["type"]["name"] not in POSTPONED_STATUSES:
+            continue
+        sides = {
+            c["homeAway"]: c["team"] for c in event["competitions"][0]["competitors"]
+        }
+        out.add((str(sides["home"]["id"]), str(sides["away"]["id"])))
+    return out
+
+
+def stalled(
+    scheduled_past: list[tuple[str, str, dt.datetime]],
+    postponed: set[tuple[str, str]],
+    *,
+    now: dt.datetime,
+) -> list[tuple[str, str, dt.datetime]]:
+    """Fixtures whose kick-off is long past that nothing has marked played, and
+    that ESPN has not just told us were called off.
+
+    This is the backstop for the ADR 0014 failure itself. The coverage audit
+    only sees FINISHED Fixtures, so it is structurally blind to a Fixture that
+    was never marked played at all — which is precisely what happened. Pure, so
+    the boundary is testable without a clock.
+    """
+    cutoff = now - STALLED_AFTER
+    return [
+        (home, away, date)
+        for home, away, date in scheduled_past
+        if date < cutoff and (home, away) not in postponed
+    ]
 
 
 def _is_placeholder(team: dict) -> bool:
@@ -393,6 +470,42 @@ def purge_stale_international_placeholders(
     return len(stale)
 
 
+def stalled_fixtures(
+    session: Session,
+    competition: Competition,
+    season: str,
+    postponed: set[tuple[str, str]],
+    *,
+    now: dt.datetime,
+) -> list[str]:
+    """Human-readable lines for this competition's stalled fixtures (ADR 0014).
+
+    Reads the Fixtures that are past their kick-off and still `scheduled`, and
+    asks `stalled` which of those ESPN has not just excused as called off.
+    """
+    home, away = aliased(Team), aliased(Team)
+    rows = session.execute(
+        select(
+            home.espn_id, away.espn_id, Fixture.date,
+            home.canonical_name, away.canonical_name,
+        )
+        .join(home, home.id == Fixture.home_team_id)
+        .join(away, away.id == Fixture.away_team_id)
+        .where(
+            Fixture.competition_id == competition.id,
+            Fixture.season == season,
+            Fixture.status == "scheduled",
+            Fixture.date < now,
+        )
+    ).all()
+    names = {(h, a): (hn, an) for h, a, _, hn, an in rows}
+    late = stalled([(h, a, d) for h, a, d, _, _ in rows], postponed, now=now)
+    return [
+        f"{d:%Y-%m-%d} {names[(h, a)][0]} v {names[(h, a)][1]}"
+        for h, a, d in sorted(late, key=lambda r: r[2])
+    ]
+
+
 def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     """Fetch + upsert the forward window for every configured league.
 
@@ -408,19 +521,21 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     view down with it. The run still ends non-zero, so the alias work alarms.
     """
     today = dt.date.today()
-    season = season_for(dt.datetime.now(tz=dt.timezone.utc))
+    now = dt.datetime.now(tz=dt.timezone.utc)
+    season = season_for(now)
     report: dict[str, dict] = {}
     unresolved_cups: dict[str, list[str]] = {}
+    stalled_all: dict[str, list[str]] = {}
     for comp_name, slug in ESPN_LEAGUES.items():
         with SessionLocal() as session:
             competition = session.scalars(
                 select(Competition).where(Competition.name == comp_name)
             ).one()
             is_cup = competition.type == "club_cup"
-            start, window_end = scoreboard_window(today, days, is_cup=is_cup)
-            events = parse_scoreboard(
-                fetch_scoreboard(slug, start, window_end), include_finished=is_cup
-            )
+            finished_too = takes_finished(competition.type)
+            start, window_end = scoreboard_window(today, days, lookback=finished_too)
+            payload = fetch_scoreboard(slug, start, window_end)
+            events = parse_scoreboard(payload, include_finished=finished_too)
             unknown: list[str] = []
             counts = {
                 "created": 0, "updated": 0, "finished": 0,
@@ -447,7 +562,12 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                     except UnknownEspnTeamError as exc:
                         unknown.append(str(exc))
                         continue
-                    counts[upsert_event(session, competition, home.id, away.id, ev.date)] += 1
+                    counts[
+                        upsert_event(
+                            session, competition, home.id, away.id, ev.date,
+                            finished=ev.finished,
+                        )
+                    ] += 1
             if unknown and not is_cup:
                 session.rollback()
                 raise UnknownEspnTeamError(
@@ -463,10 +583,29 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                 )
                 for line in unknown:
                     log(f"    {line}")
+            # Backstop (ADR 0014): the coverage audit only sees FINISHED
+            # Fixtures, so it is blind to one nothing ever marked played — which
+            # is the failure that ADR exists to remove. Skipped for
+            # internationals, whose past scheduled rows are placeholders the
+            # purge above deliberately deletes rather than marks.
+            if finished_too:
+                late = stalled_fixtures(
+                    session, competition, season, postponed_pairs(payload), now=now
+                )
+                if late:
+                    stalled_all[comp_name] = late
+                    log(
+                        f"  {comp_name}: {len(late)} fixture(s) played but never "
+                        f"marked finished - the slate is not updating:"
+                    )
+                    for line in late:
+                        log(f"    {line}")
             report[comp_name] = {"events": len(events), **counts}
             log(f"  {comp_name}: {len(events)} events -> {counts}")
     if unresolved_cups:
         report["_unresolved_cups"] = unresolved_cups
+    if stalled_all:
+        report["_stalled"] = stalled_all
     return report
 
 
@@ -511,7 +650,7 @@ def european_pending_events(
     return pending
 
 
-def european_pending(season: str, *, days: int = CUP_LOOKBACK_DAYS, log=print) -> dict:
+def european_pending(season: str, *, days: int = LOOKBACK_DAYS, log=print) -> dict:
     """Per European competition, how many played covered ties we have not ingested.
 
     One ESPN request per competition, no Cloudflare, nothing written. A failure
@@ -548,4 +687,7 @@ if __name__ == "__main__":
     result = ingest_upcoming(window)
     # A cup slate commits what it could resolve rather than rolling back, so the
     # exit code is the only thing that turns leftover alias work into an alarm.
-    sys.exit(1 if result.get("_unresolved_cups") else 0)
+    # Leftover alias work, or a slate that has stopped marking played matches
+    # finished — the latter silently stalls FBref ingestion downstream, so it
+    # must alarm here rather than be discovered weeks later (ADR 0014).
+    sys.exit(1 if result.get("_unresolved_cups") or result.get("_stalled") else 0)

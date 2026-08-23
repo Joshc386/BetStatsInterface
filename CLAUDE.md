@@ -137,6 +137,14 @@ python -m venv .venv
 # finished row is what makes matchday able to SEE a cup round at all. Cups run
 # LAST and never roll back the slate on an unresolved name — they exit 1 instead.
 # Only Covered ties are kept, so the non-league early rounds are never alias work.
+# ADR 0014: ALSO MARKS LEAGUE FIXTURES FINISHED. `finished` means the match was
+# PLAYED, not "we have the results" — before this only fd.co.uk marked a league
+# fixture finished, so an unpublished CSV read as "never happened" and silently
+# withdrew it from FBref's player pipeline too (cost 6 PL + 11 Champ fixtures,
+# Aug 2026). Internationals stay scheduled-only ON PURPOSE: their placeholders
+# are purged by status='scheduled', so marking one finished strands it forever.
+# Also runs the STALLED backstop: a fixture long past kick-off that nothing
+# marked finished, and that ESPN did not report postponed -> exit 1.
 # AUTOMATED: Windows Task Scheduler task "BetStats upcoming fixtures" runs
 # backend/run_upcoming.cmd daily 07:30 (catches up after missed starts) ->
 # backend/logs/upcoming.log — check that log first if the slate looks stale.
@@ -207,6 +215,23 @@ python -m venv .venv
 # "Liverpool" read as the PL clubs, so coverage is re-checked against the match
 # page's real team ids and collisions are dropped quietly.
 #
+# COVERAGE AUDIT (ADR 0014 — ingestion/coverage.py; zero-network, read-only)
+# Answers "has each source published this fixture's data?" PER FIXTURE PER
+# SOURCE. The old check was per LEAGUE-SEASON and so could only see "this league
+# published nothing" — when fd.co.uk published 12 of 23 Championship games the
+# other 11 were invisible. Two tiers: OVERDUE (past that source's grace, recent)
+# ALARMS; older becomes a standing known-gaps COUNT that never alarms (~79
+# minor-nation internationals FBref seems not to publish lineups for).
+# What each source owes is read from the ingesters' OWN constants, never a
+# second list — so L1/L2's 6,649 player-less fixtures are correctly NOT gaps.
+# Each job audits the source it owns, so an alarm never misattributes:
+#   nightly  -> fd.co.uk team rows   (alongside unexpected_skips, which asks the
+#               different question "did the FETCH return anything at all")
+#   matchday -> FBref player rows    (INCLUDING on the "nothing to do" path —
+#               an empty plan is a claim, and the audit checks it)
+# Grace is PROVISIONAL (fd.co.uk 48h, FBref 24h): retune from real reports.
+#   .venv/Scripts/python.exe -c "import datetime as dt; from app.db import SessionLocal; from ingestion import coverage as c; s=SessionLocal(); [c.audit(s,x,now=dt.datetime.now(dt.timezone.utc)) for x in (c.TEAM_FDCOUK,c.PLAYER_FBREF)]"
+
 # SEASON ROLLOVER (do BEFORE the first 2627 match day):
 #   -> 2026-27 has a DATED working copy with steps 1-3 already checked off
 #      against the DB: docs/season-rollover-2627.md. Read that first.

@@ -4,9 +4,11 @@ The run itself is I/O (spawns the FBref watchdog), but the *decision* of which
 competitions to refresh, in what order, is pure — that's what these lock down.
 """
 
+import datetime as dt
+
 import pytest
 
-from ingestion import matchday
+from ingestion import coverage, matchday
 from ingestion.matchday import (
     ALL_PLAYER_COMPETITIONS,
     CUP_PLAYER_COMPETITIONS,
@@ -82,8 +84,13 @@ def _isolate(monkeypatch, pending: dict[str, int], *, espn: dict | None = None):
     Both are real in this module: espn_pending reads ESPN live, and a planned
     competition spawns the FBref watchdog as a subprocess. An early version of
     these tests did exactly that and ingested two FA Cup ties for real.
+
+    The coverage audit (ADR 0014) is stubbed for the same reason in miniature:
+    it reads the live DB, so leaving it in would let production data decide a
+    unit test's outcome. Tests that care about it inject their own.
     """
     ran: list[str] = []
+    monkeypatch.setattr(matchday, "_audit_player_coverage", lambda now, log: [])
     monkeypatch.setattr(matchday.run_backfill, "_pending", _fake_pending(pending))
     monkeypatch.setattr(matchday, "espn_pending", lambda season, log=print: espn or {})
     monkeypatch.setattr(
@@ -168,3 +175,39 @@ def test_default_plan_runs_cups_even_with_no_league_work():
 
 def test_default_plan_is_empty_when_nothing_is_pending():
     assert plan_competitions(None, pending_leagues=set(), pending_cups=set()) == []
+
+
+def test_an_empty_plan_still_audits_and_reports_overdue_data(monkeypatch):
+    """The regression test for ADR 0014's failure.
+
+    On four consecutive mornings matchday logged "no pending player data" and
+    exited 0 while 6 Premier League and 11 Championship fixtures sat un-ingested.
+    The pending probe counts only FINISHED fixtures, and nothing had marked them
+    finished, so an empty plan was a claim nobody checked. Now the audit checks
+    it: no pending work is only success if the data agrees.
+    """
+    _isolate(monkeypatch, {})
+    late = [
+        coverage.Gap(
+            fixture_id=1,
+            competition="Premier League",
+            season="2627",
+            date=dt.datetime(2026, 8, 21, 19, 0, tzinfo=dt.timezone.utc),
+            source=coverage.PLAYER_FBREF,
+        )
+    ]
+
+    report = matchday.run_matchday(
+        season="2627", log=lambda *a, **k: None, audit=lambda now, log: late
+    )
+
+    assert report["ran"] == []          # still nothing it could run
+    assert report["overdue"] == late    # but it no longer claims all is well
+
+
+def test_a_genuinely_quiet_day_reports_nothing_overdue(monkeypatch):
+    """A real quiet day must stay quiet — the audit must not manufacture noise."""
+    _isolate(monkeypatch, {})
+    report = matchday.run_matchday(season="2627", log=lambda *a, **k: None)
+    assert report["ran"] == []
+    assert report["overdue"] == []

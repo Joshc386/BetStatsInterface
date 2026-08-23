@@ -12,7 +12,17 @@ import datetime as dt
 
 import pytest
 
-from ingestion import nightly
+from ingestion import coverage, nightly
+
+
+def _no_gaps(now, log):
+    """A coverage audit that finds nothing.
+
+    The real one reads the live DB, so without this a unit test's verdict would
+    depend on production data — the exact class of false signal ADR 0014 exists
+    to remove. Tests that care about overdue data inject their own.
+    """
+    return []
 
 
 def test_nightly_refreshes_current_season_and_applies_points(monkeypatch):
@@ -34,7 +44,9 @@ def test_nightly_refreshes_current_season_and_applies_points(monkeypatch):
 
     # A February 2027 run belongs to season 2627.
     result = nightly.run_nightly(
-        now=dt.datetime(2027, 2, 1, tzinfo=dt.timezone.utc), log=lambda *a, **k: None
+        now=dt.datetime(2027, 2, 1, tzinfo=dt.timezone.utc),
+        log=lambda *a, **k: None,
+        audit=_no_gaps,
     )
 
     assert calls["team_seasons"] == ["2627"]  # current season only, not a full backfill
@@ -111,7 +123,7 @@ def test_nightly_raises_when_a_started_league_was_skipped(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="E1/2627"):
-        nightly.run_nightly(now=NOW, log=lambda *a, **k: None)
+        nightly.run_nightly(now=NOW, log=lambda *a, **k: None, audit=_no_gaps)
 
     assert calls["points_ran"] is True  # points still refreshed before the alarm
 
@@ -130,7 +142,7 @@ def test_nightly_stays_green_through_a_pre_season_skip(monkeypatch):
     )
     monkeypatch.setattr(nightly, "first_kickoffs", lambda season, now: {})
 
-    result = nightly.run_nightly(now=NOW, log=lambda *a, **k: None)
+    result = nightly.run_nightly(now=NOW, log=lambda *a, **k: None, audit=_no_gaps)
     assert result["season"] == "2627"
 
 
@@ -165,7 +177,7 @@ def test_nightly_survives_a_dead_points_source(monkeypatch):
     monkeypatch.setattr(nightly, "first_kickoffs", lambda season, now: {})
 
     lines: list[str] = []
-    result = nightly.run_nightly(now=NOW, log=lines.append)
+    result = nightly.run_nightly(now=NOW, log=lines.append, audit=_no_gaps)
 
     assert result["points"] == []  # empty, not absent — callers keep their contract
     assert result["team"]["fixtures"] == 10  # the job's actual work still landed
@@ -198,4 +210,49 @@ def test_a_dead_points_source_does_not_mask_the_fdcouk_alarm(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="E1/2627"):
-        nightly.run_nightly(now=NOW, log=lambda *a, **k: None)
+        nightly.run_nightly(now=NOW, log=lambda *a, **k: None, audit=_no_gaps)
+
+
+def test_nightly_alarms_when_fdcouk_is_behind_on_individual_fixtures(monkeypatch):
+    """Partial publication is the case the fetch check cannot see (ADR 0014).
+
+    football-data.co.uk published 12 of 23 Championship games on 2026-08-23.
+    Nothing was "skipped" — the CSV existed and parsed — so unexpected_skips had
+    nothing to report, and the other 11 fixtures were silently missing.
+    """
+    monkeypatch.setattr(
+        nightly.team_match,
+        "ingest",
+        lambda seasons: {"per_league_season": {"E1/2627": 12}, "skipped": []},
+    )
+    monkeypatch.setattr(
+        nightly.points_adjustments, "ingest_points_adjustments", lambda **k: []
+    )
+
+    late = [
+        coverage.Gap(
+            fixture_id=7,
+            competition="Championship",
+            season="2627",
+            date=NOW - dt.timedelta(days=3),
+            source=coverage.TEAM_FDCOUK,
+        )
+    ]
+    with pytest.raises(RuntimeError, match="has not published"):
+        nightly.run_nightly(
+            now=NOW, log=lambda *a, **k: None, audit=lambda now, log: late
+        )
+
+
+def test_a_clean_fetch_with_no_gaps_stays_green(monkeypatch):
+    """The alarm must not fire just because the audit ran."""
+    monkeypatch.setattr(
+        nightly.team_match,
+        "ingest",
+        lambda seasons: {"per_league_season": {"E1/2627": 12}, "skipped": []},
+    )
+    monkeypatch.setattr(
+        nightly.points_adjustments, "ingest_points_adjustments", lambda **k: []
+    )
+    result = nightly.run_nightly(now=NOW, log=lambda *a, **k: None, audit=_no_gaps)
+    assert result["overdue"] == []

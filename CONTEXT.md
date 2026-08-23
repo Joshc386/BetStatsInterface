@@ -9,8 +9,10 @@ scheduled ingestion jobs. It is a research tool — not a bot, not a predictive 
 ### Entities & facts
 
 **Fixture**:
-A single scheduled event between two teams — one row, a date, a status (`scheduled` | `finished`). Both upcoming and historical games are Fixtures; a finished Fixture is one with results in. The unit the **Fixture view** is built around.
-_Avoid_: match (ambiguous), game (UI label only).
+A single scheduled event between two teams — one row, a date, a status (`scheduled` | `finished`). Both upcoming and historical games are Fixtures. **`finished` means the match was played** — kickoff happened and it reached a result *in the world* — and says nothing about whether we hold any data for it. Whether a given source has published is a separate, **derived** question (is there a **Team-Match** row? a **Player-Match** row?), never a status. Any source that can see a result may assert `finished`; a Fixture is never demoted once finished. The unit the **Fixture view** is built around.
+
+The distinction is load-bearing, and was learned the hard way (2026-08): while "played" and "results in" were the same fact, **only football-data.co.uk ever marked a league Fixture finished**, so an unpublished CSV read as *"the match never happened"* — silently withdrawing the Fixture from FBref's player pipeline too, with the match-day job reporting no pending work and exiting clean. Same class of failure as the one **Covered tie** already records, and the same doctrine applies: a source outage should be visible, not absorbed.
+_Avoid_: match (ambiguous), game (UI label only); reading `finished` as "we hold the results".
 
 **Team-Match**:
 One team's perspective on a **Fixture** — the team-level fact row. A Fixture has exactly two Team-Match rows. The unit a team **Rolling Window** iterates over.
@@ -63,6 +65,14 @@ The top four English tiers — Premier League, Championship, League One, League 
 **Covered tie**:
 A cup or European **Fixture** the project ingests: a tie with **at least one Premier League or Championship club in that season**. Decided season-aware from the **union** of a club's PL/Championship `team_match` and `fixtures` rows that season, so a club relegated out of the top two does not pull its cup ties into an untracked season. The union is deliberate: `team_match` alone sources the set from football-data.co.uk, so an outage there silently empties the covered set and rules real ties out of scope with no warning (observed 2026-08: with E0 unpublished, **no** Premier League club was covered for 2627, while ESPN-sourced fixtures held all 20). The two sources are compared each run and any divergence is logged — a source outage should be visible, not absorbed. For domestic cups this excludes the lower-/non-league-only early rounds; for European competitions (scoped 2026-07, ingestion pending) it excludes foreign-vs-foreign fixtures. The uncovered opponent — a League One side or a foreign club — is stored in full **for that Fixture** (canonical team row, team + player rows) as a bonus toward later coverage, but its other fixtures are not held: its form windows are partial and never implied complete. The filter loosens as coverage expands (League One/Two player data; other domestic leagues eventually).
 _Avoid_: treating every tie in a competition's schedule as in scope.
+
+**Overdue**:
+A **Fixture** that is `finished` (was played) but whose expected data from a given source has not arrived. Judged **per Fixture per source**, never per league-season — the earlier league-level check could only see "this league published nothing", so when football-data.co.uk published 12 of 23 Championship games the other 11 were silently invisible while the Premier League's total absence alarmed loudly.
+
+What each source *owes* is read from the same constants the ingesters use (`matchday.LEAGUE_PLAYER_COMPETITIONS`, `CUP_PLAYER_COMPETITIONS`, `cups.COVERED_COMPETITIONS`, the competition's `fdcouk_key`) — never a second list, which would drift from the first. So a League One **Player-Match** is *not* Overdue: it is out of scope by design (6,649 such Fixtures), and absence there is correct.
+
+Reported in **two tiers**, from one derived query split by age: *recently* Overdue **alarms** — that is the actionable signal — while anything older becomes a standing **known-gaps** count that is always reported and never alarms (~79 minor-nation international Fixtures FBref appears not to publish lineups for). Nothing is ever written off silently; a permanent gap stays visible as a coverage figure rather than decaying into an assumption.
+_Avoid_: "missing" (conflates out-of-scope-by-design with late); treating a whole-league skip as the unit.
 
 **Promotion Play-offs**:
 The end-of-season knockout deciding the last promotion place (Championship/League One/League Two): teams finishing 3rd–6th contest two-legged semi-finals (4 fixtures) then a single neutral-venue final. Modelled as its **own competition** ("Championship Play-offs", **Competition Type** `club_cup`), never as part of the regular season — a play-off leg shares the same home/away orientation as a league meeting, so keeping it under `club_league` collided on the Fixture natural key and contaminated league form (see `docs/adr/0004`). Player data only (football-data.co.uk does not cover play-offs). A "last N **league** games" window therefore excludes them by scope.
