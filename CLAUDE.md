@@ -160,6 +160,26 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.run_backfill 2026 "WC Qual UEFA"   # a qualifier league, same path
 .venv/Scripts/python.exe -m ingestion.internationals team "World Cup Qualifiers"  # team rows (zero-network, loops stored seasons)
 
+# squad membership (ADR 0013 — ESPN rosters; TIER 1, unattended, idempotent)
+# Membership only, NEVER a stat — every Metric still comes from FBref. No VPN, no
+# headful browser, no rate limiter. ~92 requests (the four English tiers), ~35s.
+.venv/Scripts/python.exe -m ingestion.squads
+# AUTOMATED: Task Scheduler task "BetStats squads" runs backend/run_squads.cmd
+# daily 09:00 (StartWhenAvailable) -> backend/logs/squads.log.
+# ORDER IS LOAD-BEARING: it must run AFTER "BetStats upcoming fixtures" (07:30),
+# because _rostered_teams() derives its club list from the Fixture slate — a
+# promoted/relegated club only follows the season once upcoming has laid this
+# season's fixtures down. 09:00 also puts it after matchday (08:00), so the
+# identity ladder sees the freshest player names; preferred, not required.
+# Membership = Squad ∪ anyone with an appearance in the last 30 days, so an
+# unmatched name degrades the panel to SLIGHTLY STALE, never to missing a player.
+# Exit 1 = a club's roster fetch failed -> that Squad is left STALE and the panel
+# shows it without complaint, hence the notifier.
+# UNMATCHED NAMES ARE NORMAL (~519 of 2605, heavily League One/Two where we hold
+# little player data) — they surface in the panel as members with "—". Only add
+# an ESPN_PLAYER_ALIASES entry when it is a player we actually HOLD and the
+# deterministic ladder cannot reach him (e.g. an ESPN typo, or a nickname).
+
 # points deductions (ADR 0010 — ESPN standings; feeds the computed GET /table)
 .venv/Scripts/python.exe -m ingestion.points_adjustments          # dry-run: print found deductions
 .venv/Scripts/python.exe -m ingestion.points_adjustments --apply  # upsert (idempotent; re-run for new rulings)
