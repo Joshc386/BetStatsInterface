@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type Entity, type SearchHit, type Summary, type UpcomingFixture } from '../api'
 import { useCatalogue } from '../useCatalogue'

@@ -9,7 +9,7 @@
 // appearances for is shown with no figure and no date, sorted last — "in the
 // squad, nothing known" is different information from "not in the squad".
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '../api'
 import { EntityLink, playerHref } from '../components/EntityLink'
