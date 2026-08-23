@@ -11,6 +11,36 @@ import re
 import unicodedata
 
 
+# Generic club-name tokens carried by so many clubs that they cannot identify
+# one. At European volume, first-word matching alone would deadlock on unrelated
+# clubs ("FC Porto" vs "FC Copenhagen"). The guard compares the first NON-generic
+# token instead — which also sharpens it domestically ("AFC Wimbledon" guards on
+# "wimbledon", not "afc").
+GENERIC_NAME_TOKENS = frozenset(
+    "fc afc ac as cf sc sk fk sl ss rb cd rc sd us st 1 real sporting "
+    "dinamo dynamo red inter aek".split()
+)
+
+
+def guard_token(name: str) -> str:
+    """The first non-generic token of a club name, casefolded — the
+    duplicate-spelling signature the auto-create guards compare on.
+
+    Lives here so BOTH source resolvers share one implementation: the FBref path
+    (`cups.resolve_or_create_fbref_team`, ADR 0007/0008) and the
+    football-data.co.uk path (`teams.resolve_fdcouk_team`). It was FBref-only
+    until 2026-08-23, when fd.co.uk spelled a relegated club differently in the
+    League One CSV than the Championship one ("Sheffield Wed" / "Bradford City")
+    and silently minted duplicate clubs — the exact failure this catches, on the
+    one path that lacked it.
+    """
+    tokens = [t for t in re.split(r"[\s.]+", name) if t]
+    for t in tokens:
+        if t.casefold() not in GENERIC_NAME_TOKENS:
+            return t.casefold()
+    return tokens[0].casefold() if tokens else ""
+
+
 def clean_name(name: str) -> str:
     """Collapse whitespace and strip. Deterministic and idempotent."""
     return re.sub(r"\s+", " ", str(name).strip())

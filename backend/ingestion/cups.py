@@ -34,7 +34,12 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Team
-from ingestion.names import clean_name, normalise_for_match
+from ingestion.names import (
+    GENERIC_NAME_TOKENS,
+    clean_name,
+    guard_token,
+    normalise_for_match,
+)
 from ingestion.players import (
     _FBREF_CACHE,
     ScorelineError,
@@ -167,20 +172,10 @@ CUP_CREATE_ALLOWLIST: frozenset[str] = frozenset({
 # ("FC Porto" vs "FC Copenhagen"). The guard compares the first NON-generic
 # token instead — which also sharpens it domestically ("AFC Wimbledon" guards
 # on "wimbledon", not "afc").
-GENERIC_NAME_TOKENS = frozenset(
-    "fc afc ac as cf sc sk fk sl ss rb cd rc sd us st 1 real sporting "
-    "dinamo dynamo red inter aek".split()
-)
-
-
-def _guard_token(name: str) -> str:
-    """The first non-generic token of a club name, casefolded (the duplicate-
-    spelling signature the auto-create guard compares on)."""
-    tokens = [t for t in re.split(r"[\s.]+", name) if t]
-    for t in tokens:
-        if t.casefold() not in GENERIC_NAME_TOKENS:
-            return t.casefold()
-    return tokens[0].casefold() if tokens else ""
+# Moved to ingestion/names.py so the football-data.co.uk resolver shares one
+# implementation (see guard_token's docstring). Re-exported: this module's
+# comments and callers have always referred to _guard_token.
+_guard_token = guard_token
 
 
 # FBref schedule team names in European competitions carry a country code

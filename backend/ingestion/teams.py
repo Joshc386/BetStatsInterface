@@ -16,24 +16,82 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.reference import Competition, Team
 from ingestion.fdcouk import read_results
-from ingestion.names import clean_name, normalise_for_match
+from ingestion.names import clean_name, guard_token, normalise_for_match
 
 # Recent seasons define the current team universe. Historical backfill (Phase 3)
 # upserts any older teams through the same resolver, so this set is a starting point.
 UNIVERSE_SEASONS = ["2324", "2425", "2526"]
 
 
-def resolve_fdcouk_team(session: Session, fdcouk_name: str) -> Team:
-    """Return the canonical Team for a football-data.co.uk name, creating it if new.
+class UnknownFdcoukTeamError(RuntimeError):
+    """A football-data.co.uk name that looks like a club we already hold."""
+
+
+# football-data.co.uk name -> canonical name, where the CSV spells a club
+# differently from the row we already hold. Deterministic, never fuzzy.
+#
+# The trigger (2026-08-23): fd.co.uk does not spell clubs the same way across
+# divisions, and a RELEGATED club therefore arrives under a new name. Sheffield
+# Wednesday went down to League One and the E2 CSV calls them "Sheffield Wed"
+# where E1 said "Sheffield Weds"; Bradford are "Bradford City" in E2 and
+# "Bradford" elsewhere. Both silently minted duplicate clubs.
+FDCOUK_TEAM_ALIASES: dict[str, str] = {
+    # 2026-27: relegated/promoted into a division that spells them differently
+    "Sheffield Wed": "Sheffield Weds",
+    "Bradford City": "Bradford",
+}
+
+
+def resolve_fdcouk_team(
+    session: Session, fdcouk_name: str, *, allow_create: bool = False
+) -> Team:
+    """Return the canonical Team for a football-data.co.uk name.
 
     Idempotent: the same source name always resolves to the same row.
+
+    ``allow_create`` distinguishes the two callers, and the distinction is the
+    whole point. Building the universe (`build_team_universe`) legitimately
+    creates every club it sees. Routine ingestion (`team_match`) must NOT: a
+    name it has never seen mid-season is a RENAME, not a new club, and creating
+    a row for it splits the club's history in silence — which is exactly what
+    happened on 2026-08-23 (see FDCOUK_TEAM_ALIASES).
+
+    Even with ``allow_create``, creation is refused when an existing club shares
+    the name's first non-generic token — the signature of a respelling. Mirrors
+    `cups.resolve_or_create_fbref_team`, which has guarded the FBref path this
+    way since commit 1cbc322; this path simply never got it.
     """
     name = clean_name(fdcouk_name)
+    name = FDCOUK_TEAM_ALIASES.get(name, name)
     team = session.scalar(select(Team).where(Team.fdcouk_name == name))
-    if team is None:
-        team = Team(canonical_name=name, fdcouk_name=name, country="England")
-        session.add(team)
-        session.flush()  # assign id
+    if team is not None:
+        return team
+
+    token = guard_token(name)
+    clash = next(
+        (
+            t
+            for t in session.scalars(select(Team))
+            if guard_token(t.fdcouk_name or t.canonical_name) == token
+        ),
+        None,
+    )
+    if clash is not None:
+        raise UnknownFdcoukTeamError(
+            f"football-data.co.uk name {name!r} is new, but {clash.canonical_name!r} "
+            f"(id={clash.id}) already shares the token {token!r} — the signature of "
+            f"one club spelled two ways. Same club -> add a FDCOUK_TEAM_ALIASES "
+            f"entry; genuinely different -> seed the row deliberately."
+        )
+    if not allow_create:
+        raise UnknownFdcoukTeamError(
+            f"football-data.co.uk name {name!r} is not a club we hold. A new name "
+            f"mid-season is a rename or a promoted club, never an auto-create: add "
+            f"a FDCOUK_TEAM_ALIASES entry, or seed the club deliberately."
+        )
+    team = Team(canonical_name=name, fdcouk_name=name, country="England")
+    session.add(team)
+    session.flush()  # assign id
     return team
 
 
@@ -84,7 +142,7 @@ def build_team_universe(seasons: list[str] = UNIVERSE_SEASONS) -> dict:
             before = session.scalar(
                 select(Team.id).where(Team.fdcouk_name == name)
             )
-            resolve_fdcouk_team(session, name)
+            resolve_fdcouk_team(session, name, allow_create=True)
             if before is None:
                 created += 1
         session.commit()

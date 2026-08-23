@@ -4,12 +4,21 @@
 so it leaves no data behind. It requires DATABASE_URL to be reachable.
 """
 
-from sqlalchemy import text
+import datetime as dt
+
+import pytest
+from sqlalchemy import select, text
 
 from ingestion.names import clean_name, normalise_for_match
-from ingestion.teams import find_duplicate_teams, resolve_fdcouk_team
+from ingestion.teams import (
+    FDCOUK_TEAM_ALIASES,
+    UnknownFdcoukTeamError,
+    find_duplicate_teams,
+    resolve_fdcouk_team,
+)
 from app.db import SessionLocal
 from app.models.reference import Team
+from ingestion.upcoming import season_for
 
 
 def test_clean_name_collapses_whitespace():
@@ -48,7 +57,9 @@ def test_normalise_for_match_is_idempotent():
 def test_resolve_fdcouk_team_is_idempotent():
     session = SessionLocal()
     try:
-        t1 = resolve_fdcouk_team(session, "__Reconciliation Test FC__")
+        t1 = resolve_fdcouk_team(
+            session, "__Reconciliation Test FC__", allow_create=True
+        )
         # whitespace variant must resolve to the SAME canonical row
         t2 = resolve_fdcouk_team(session, "  __Reconciliation Test FC__ ")
         assert t1.id is not None
@@ -124,6 +135,123 @@ def test_player_goals_never_exceed_team_goals():
         assert not violations, (
             f"{len(violations)} team-fixtures where summed player goals exceed "
             f"team gf (data contamination): {[tuple(v) for v in violations[:10]]}"
+        )
+    finally:
+        session.close()
+
+
+# --- fd.co.uk duplicate-club guard (2026-08-23) ----------------------------
+
+
+def test_a_relegated_clubs_new_spelling_resolves_to_the_existing_row():
+    """football-data.co.uk does not spell clubs the same way across divisions.
+
+    Sheffield Wednesday went down to League One and the E2 CSV calls them
+    "Sheffield Wed" where E1 said "Sheffield Weds". Without the alias that minted
+    a second club and split their history.
+    """
+    session = SessionLocal()
+    try:
+        canonical = resolve_fdcouk_team(session, "Sheffield Weds")
+        aliased = resolve_fdcouk_team(session, "Sheffield Wed")
+        assert aliased.id == canonical.id
+        assert resolve_fdcouk_team(session, "Bradford City").id == (
+            resolve_fdcouk_team(session, "Bradford").id
+        )
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_routine_ingestion_refuses_to_invent_a_club():
+    """A name team_match has never seen mid-season is a RENAME, not a new club.
+    Auto-creating one is how a club's history splits in silence."""
+    session = SessionLocal()
+    try:
+        with pytest.raises(UnknownFdcoukTeamError, match="never an auto-create"):
+            resolve_fdcouk_team(session, "__ZZ Totally New Club__")
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_a_respelling_is_refused_even_when_creation_is_allowed():
+    """The universe build may create clubs, but not one that shares an existing
+    club's first non-generic token — that is a respelling, not a new club."""
+    session = SessionLocal()
+    try:
+        existing = Team(canonical_name="__ZZQuux Rovers__", fdcouk_name="__ZZQuux Rovers__")
+        session.add(existing)
+        session.flush()
+        with pytest.raises(UnknownFdcoukTeamError, match="spelled two ways"):
+            resolve_fdcouk_team(session, "__ZZQuux Rovers__ City", allow_create=True)
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_the_universe_build_may_still_create_a_genuinely_new_club():
+    """The guard must not break the bootstrap, which legitimately creates every
+    club it sees from the CSV."""
+    session = SessionLocal()
+    try:
+        team = resolve_fdcouk_team(session, "__ZZ Unrelated Wanderers__", allow_create=True)
+        assert team.id is not None
+        assert team.fdcouk_name == "__ZZ Unrelated Wanderers__"
+    finally:
+        session.rollback()
+        session.close()
+
+
+def test_every_alias_target_is_a_club_we_actually_hold():
+    """A typo in the alias map would route a real club to nothing. Read-only."""
+    session = SessionLocal()
+    try:
+        for source, target in FDCOUK_TEAM_ALIASES.items():
+            found = session.scalar(select(Team).where(Team.fdcouk_name == target))
+            assert found is not None, f"alias {source!r} -> {target!r} matches no team"
+    finally:
+        session.close()
+
+
+def test_no_phantom_clubs_carry_current_season_data():
+    """Standing regression guard for the 2026-08-23 duplicate-club bug.
+
+    A club we genuinely track always carries a source id — an `espn_id` from the
+    fixture slate, an `fbref_id` from the identity spine, or both. A row with
+    NEITHER that nonetheless holds current-season team data was auto-created by a
+    source spelling an existing club differently, and has silently taken a real
+    club's matches with it.
+
+    Deliberately scoped to the CURRENT season: clubs long outside the four tiers
+    (Southend, Scunthorpe) legitimately have no ids and old rows, and flagging
+    them forever would make this guard noise.
+
+    Chosen over a first-token collision check, which was measured and rejected:
+    all 8 collisions in the live table (Man City/United, Sheffield United/Weds,
+    Bristol City/Rvs, Korea Republic/DPR, ...) are genuinely different clubs with
+    distinct ids, so that check is 100% false positives.
+    """
+    session = SessionLocal()
+    try:
+        season = season_for(dt.datetime.now(dt.timezone.utc))
+        rows = session.execute(
+            text(
+                """
+                SELECT t.id, t.canonical_name
+                FROM teams t
+                WHERE t.espn_id IS NULL AND t.fbref_id IS NULL
+                  AND EXISTS (
+                    SELECT 1 FROM team_match tm
+                    WHERE tm.team_id = t.id AND tm.season = :season
+                  )
+                """
+            ),
+            {"season": season},
+        ).all()
+        assert not rows, (
+            f"phantom club(s) holding {season} data: {rows} — a source spelled an "
+            f"existing club differently. Add a FDCOUK_TEAM_ALIASES entry and merge."
         )
     finally:
         session.close()
