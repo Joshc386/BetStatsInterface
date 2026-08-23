@@ -35,12 +35,15 @@ import datetime as dt
 import subprocess
 import sys
 
-from ingestion import coverage, cups, run_backfill, upcoming
+from ingestion import coverage, cups, players, run_backfill, upcoming
 from app.db import SessionLocal
 from ingestion.upcoming import season_for
 
 # Player competitions by ingestion path (see ingestion.run_backfill routing).
-LEAGUE_PLAYER_COMPETITIONS = ["Premier League", "Championship"]  # players.py path
+# Defined in players.py (the scope it describes) and re-exported here, which is
+# how it has always been referenced. Importing it the other way round made
+# coverage depend upwards on this orchestrator and created an import cycle.
+LEAGUE_PLAYER_COMPETITIONS = list(players.LEAGUE_PLAYER_COMPETITIONS)
 CUP_PLAYER_COMPETITIONS = [
     "FA Cup",
     "EFL Cup",
@@ -153,7 +156,7 @@ def run_matchday(
     season: str | None = None,
     now: dt.datetime | None = None,
     log=print,
-    audit=_audit_player_coverage,
+    audit=None,
 ) -> dict:
     """Refresh player data for the planned competitions under the watchdog.
 
@@ -163,6 +166,10 @@ def run_matchday(
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     season = season or season_for(now)
+    # Resolved here, not as a default argument: a default binds at def time, so
+    # monkeypatching the module attribute would silently NOT take effect and the
+    # test would read the live DB instead. Same idiom as `now` and `season`.
+    audit = audit or _audit_player_coverage
 
     # Only the default (unnamed) run needs the pending-work probe; an explicit
     # request runs exactly what it names.

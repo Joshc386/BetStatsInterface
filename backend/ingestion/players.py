@@ -763,6 +763,18 @@ LEAGUE_IDS = {
     "Championship": "ENG-Championship",
 }
 
+# The leagues whose player data is ingested automatically — the same set as
+# LEAGUE_IDS, named for the ORCHESTRATION question ("what does matchday plan?")
+# rather than the fetch question ("what soccerdata id?").
+#
+# Lives here, not in matchday, because matchday is an ORCHESTRATOR and modules
+# below it need this fact: ingestion/coverage.py must know which leagues owe
+# player data to tell a real gap from one that is out of scope by design. When
+# it lived in matchday, coverage had to import upwards and the cycle only broke
+# on import ORDER — `python -m ingestion.matchday` died while the test suite,
+# which imports coverage first, passed.
+LEAGUE_PLAYER_COMPETITIONS = list(LEAGUE_IDS)
+
 
 if __name__ == "__main__":
     import sys

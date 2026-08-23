@@ -4,10 +4,13 @@ ADR 0014. `Fixture.status == "finished"` means the match was *played*; whether a
 source has published its data is a separate question, answered here by a join
 rather than stored. Nothing in this module writes.
 
-Judged **per Fixture per source**. The league-level check this supersedes
-(`nightly.unexpected_skips`) could only see "this league published nothing", so
-when football-data.co.uk published 12 of 23 Championship games the other 11 were
-invisible while the Premier League's total absence alarmed loudly.
+Judged **per Fixture per source**. This COMPLEMENTS `nightly.unexpected_skips`
+rather than replacing it — they ask different questions and neither subsumes the
+other. That one asks "did the FETCH return anything at all for a league that has
+kicked off?"; this one asks "did the DATA arrive, per Fixture?". The fetch check
+is structurally blind to PARTIAL publication: when football-data.co.uk published
+12 of 23 Championship games there was no skip to report, so the other 11 were
+invisible, while the Premier League's total absence alarmed loudly.
 
 Reported in two tiers, because the audit must not cry wolf:
   * **overdue** — past its source's grace period and recent enough to act on.
@@ -30,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition
-from ingestion.matchday import LEAGUE_PLAYER_COMPETITIONS
+from ingestion.players import LEAGUE_PLAYER_COMPETITIONS
 
 TEAM_FDCOUK = "fd.co.uk team rows"
 PLAYER_FBREF = "FBref player rows"

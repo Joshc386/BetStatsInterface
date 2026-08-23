@@ -84,7 +84,7 @@ def _audit_team_coverage(now: dt.datetime, log) -> list[coverage.Gap]:
 
 
 def run_nightly(
-    now: dt.datetime | None = None, log=print, audit=_audit_team_coverage
+    now: dt.datetime | None = None, log=print, audit=None
 ) -> dict:
     """Refresh the current season's league team data + points deductions.
 
@@ -98,6 +98,8 @@ def run_nightly(
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     season = season_for(now)
+    # See matchday: resolved here so monkeypatching actually works.
+    audit = audit or _audit_team_coverage
     log(f"[nightly] {now:%Y-%m-%d %H:%M} — refreshing current season {season}")
 
     team = team_match.ingest(seasons=[season])
