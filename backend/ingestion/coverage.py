@@ -86,9 +86,13 @@ def expected_sources(
     duplicate would drift from the original and start reporting fiction.
 
     football-data.co.uk is league-only (ADR 0001) and only where a CSV key
-    exists. FBref owes player rows for the leagues in matchday's player scope;
-    League One / Two are deliberately outside it, so their 6,649 finished
-    Fixtures with no player rows are correct, not gaps. For every other scope a
+    exists. FBref owes player rows for the leagues in matchday's player scope,
+    which since 2026-08-24 is all four English tiers. League One / Two used to
+    sit outside it, and their ~6,649 player-less Fixtures were correct rather
+    than gaps; now they are genuinely owed and the historical backlog is held
+    by KNOWN_GAP_AFTER instead — old enough to be a standing coverage figure,
+    so it never alarms while the backfill lands season by season. For every
+    other scope a
     Fixture row only exists because the tie was in scope when it was written
     (`select_cup_events` keeps Covered ties only; internationals are ingested
     whole-competition), so its presence is itself the coverage decision.
