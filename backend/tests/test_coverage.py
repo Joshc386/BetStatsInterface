@@ -7,7 +7,12 @@ finds the gaps is a thin join over both.
 
 import datetime as dt
 
+from sqlalchemy import func, select, update
+
+from app.db import SessionLocal
+from app.models.facts import Fixture, TeamMatch
 from ingestion.coverage import (
+    find_gaps,
     KNOWN_GAP_AFTER,
     PLAYER_FBREF,
     TEAM_FDCOUK,
@@ -116,3 +121,88 @@ def test_split_tiers_separates_the_alarm_from_the_standing_count():
 def test_split_tiers_is_empty_when_everything_is_current():
     gaps = [_gap(TEAM_FDCOUK, age=dt.timedelta(hours=1))]
     assert split_tiers(gaps, now=NOW) == ([], [])
+
+
+# --- provenance: an ESPN row must not answer for football-data.co.uk --------
+#
+# docs/adr/0015. These run against the live DB but COMMIT NOTHING: they flip a
+# row's source inside a transaction, assert, and roll back.
+
+
+def test_espn_team_row_does_not_satisfy_the_fdcouk_expectation():
+    """The regression ADR 0014 exists to prevent, reintroduced by ADR 0015.
+
+    `find_gaps` used to ask "is there a team row?" rather than "did
+    football-data.co.uk publish?". Once ESPN can write a club_league row the
+    two questions diverge, and the wrong one silences the alarm for the source
+    that actually failed — absorbing the outage instead of exposing it.
+    """
+    with SessionLocal() as session:
+        fixture_id = session.scalar(
+            select(TeamMatch.fixture_id)
+            .join(Fixture, Fixture.id == TeamMatch.fixture_id)
+            .where(
+                TeamMatch.source == "fdcouk",
+                TeamMatch.competition_type == "club_league",
+                Fixture.status == "finished",
+            )
+            .limit(1)
+        )
+        assert fixture_id is not None, "no fd.co.uk league rows to exercise"
+
+        assert fixture_id not in {
+            g.fixture_id for g in find_gaps(session, TEAM_FDCOUK)
+        }, "a fd.co.uk-sourced Fixture should not be reported as a gap"
+
+        session.execute(
+            update(TeamMatch)
+            .where(TeamMatch.fixture_id == fixture_id)
+            .values(source="espn")
+        )
+        session.flush()
+
+        assert fixture_id in {
+            g.fixture_id for g in find_gaps(session, TEAM_FDCOUK)
+        }, "an ESPN row silenced the football-data.co.uk alarm"
+
+        session.rollback()
+
+
+def test_espn_team_row_does_not_disturb_the_fbref_player_audit():
+    """Each job audits the source it owns — team provenance must not leak into
+    the player-row question, or an alarm could misattribute one source's
+    failure to another's."""
+    with SessionLocal() as session:
+        fixture_id = session.scalar(
+            select(TeamMatch.fixture_id)
+            .join(Fixture, Fixture.id == TeamMatch.fixture_id)
+            .where(
+                TeamMatch.source == "fdcouk",
+                TeamMatch.competition_type == "club_league",
+                Fixture.status == "finished",
+            )
+            .limit(1)
+        )
+        before = {g.fixture_id for g in find_gaps(session, PLAYER_FBREF)}
+
+        session.execute(
+            update(TeamMatch)
+            .where(TeamMatch.fixture_id == fixture_id)
+            .values(source="espn")
+        )
+        session.flush()
+
+        assert {g.fixture_id for g in find_gaps(session, PLAYER_FBREF)} == before
+
+        session.rollback()
+
+
+def test_every_team_match_row_declares_a_source():
+    """The column exists so provenance is never unknown; NOT NULL is the
+    guarantee and this is the canary if a new writer forgets to stamp it."""
+    with SessionLocal() as session:
+        assert session.scalar(
+            select(func.count()).select_from(TeamMatch).where(
+                TeamMatch.source.is_(None)
+            )
+        ) == 0

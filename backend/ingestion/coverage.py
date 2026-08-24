@@ -120,8 +120,18 @@ def find_gaps(session: Session, source: str, *, season: str | None = None) -> li
 
     One query per source; the expectation filter is applied in Python so it
     stays the single readable statement of who owes what.
+
+    The presence of a fact row is NOT evidence that `source` published it. Since
+    docs/adr/0015 a `club_league` Team-Match may have been written from ESPN
+    while football-data.co.uk is still silent, so the TEAM_FDCOUK probe is
+    narrowed to rows football-data.co.uk actually wrote. Without that filter the
+    first ESPN row would silence this alarm and absorb the outage it exists to
+    expose — the same failure ADR 0014 was written to prevent.
     """
     fact = TeamMatch if source == TEAM_FDCOUK else PlayerMatch
+    published = select(fact.id).where(fact.fixture_id == Fixture.id)
+    if source == TEAM_FDCOUK:
+        published = published.where(TeamMatch.source == "fdcouk")
     q = (
         select(
             Fixture.id,
@@ -134,9 +144,7 @@ def find_gaps(session: Session, source: str, *, season: str | None = None) -> li
         .join(Competition, Competition.id == Fixture.competition_id)
         .where(
             Fixture.status == "finished",
-            ~select(fact.id)
-            .where(fact.fixture_id == Fixture.id)
-            .exists(),
+            ~published.exists(),
         )
     )
     if season is not None:
