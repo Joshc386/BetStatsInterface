@@ -74,11 +74,28 @@ def unexpected_skips(
 
 
 def _audit_team_coverage(now: dt.datetime, log) -> list[coverage.Gap]:
-    """This job owns football-data.co.uk, so it owns the alarm for its gaps
-    (ADR 0014). Opens its own session — nothing above holds one."""
+    """Audit league team coverage. Returns only the gaps worth ALARMING on.
+
+    This job owns football-data.co.uk, so it reports every fd.co.uk gap
+    (ADR 0014) — but since docs/adr/0015 those are no longer fatal. ESPN fills
+    a played Fixture within hours and fd.co.uk reclaims it whenever it
+    publishes, so "fd.co.uk is late" degrades nothing; it is bookkeeping. It
+    stays fully visible in the log and in the coverage figures, because a source
+    outage must never be absorbed — it just stops paging a human who cannot act
+    on it. Left fatal it would fire every morning: fd.co.uk published nothing at
+    all between 20 and 24 August 2026 across all four tiers, and never published
+    E0 for 2026-27.
+
+    What IS fatal is a played league Fixture carrying no team row from ANY
+    source. That is the product actually missing data, and it means the ESPN
+    chain has broken.
+
+    Opens its own session — nothing above holds one.
+    """
     with SessionLocal() as session:
+        coverage.audit(session, coverage.TEAM_FDCOUK, now=now, log=log)
         overdue, _known = coverage.audit(
-            session, coverage.TEAM_FDCOUK, now=now, log=log
+            session, coverage.TEAM_ANY, now=now, log=log
         )
     return overdue
 
@@ -147,8 +164,8 @@ def run_nightly(
         )
     if overdue:
         problems.append(
-            f"football-data.co.uk has not published {len(overdue)} played "
-            "fixture(s) past their grace period: "
+            f"{len(overdue)} played league fixture(s) have NO team data from "
+            "any source past the grace period — the ESPN chain is broken: "
             + "; ".join(
                 f"{g.competition} {g.season} {g.date:%Y-%m-%d}" for g in overdue[:10]
             )

@@ -37,6 +37,13 @@ from ingestion.players import LEAGUE_PLAYER_COMPETITIONS
 
 TEAM_FDCOUK = "fd.co.uk team rows"
 PLAYER_FBREF = "FBref player rows"
+# "Is this played league Fixture missing team data ENTIRELY?" — a different
+# question from TEAM_FDCOUK, and since docs/adr/0015 the important one.
+# football-data.co.uk being late no longer degrades anything: ESPN fills the
+# Fixture within hours and fd.co.uk reclaims it later. What still matters is a
+# Fixture NO source covered, because that is the product actually missing data.
+# Both are reported; only this one is worth waking someone for.
+TEAM_ANY = "team rows (any source)"
 
 # Per-source, because their publishing rhythms differ by an order of magnitude:
 # FBref has a match page up within hours, football-data.co.uk has repeatedly
@@ -50,6 +57,9 @@ PLAYER_FBREF = "FBref player rows"
 GRACE = {
     TEAM_FDCOUK: dt.timedelta(hours=48),
     PLAYER_FBREF: dt.timedelta(hours=24),
+    # ESPN writes within a couple of hours of full time, so a Fixture still
+    # bare a day later means the chain is broken, not merely slow.
+    TEAM_ANY: dt.timedelta(hours=24),
 }
 
 # Past this, a gap stops being actionable and becomes a coverage fact.
@@ -85,6 +95,9 @@ def expected_sources(
     """
     owed = set()
     if competition_type == "club_league":
+        # Every league Fixture owes team data from SOMEWHERE: ESPN covers all
+        # four tiers (docs/adr/0015), unlike fd.co.uk which needs a CSV key.
+        owed.add(TEAM_ANY)
         if fdcouk_key:
             owed.add(TEAM_FDCOUK)
         if competition_name in LEAGUE_PLAYER_COMPETITIONS:
@@ -128,7 +141,7 @@ def find_gaps(session: Session, source: str, *, season: str | None = None) -> li
     first ESPN row would silence this alarm and absorb the outage it exists to
     expose — the same failure ADR 0014 was written to prevent.
     """
-    fact = TeamMatch if source == TEAM_FDCOUK else PlayerMatch
+    fact = PlayerMatch if source == PLAYER_FBREF else TeamMatch
     published = select(fact.id).where(fact.fixture_id == Fixture.id)
     if source == TEAM_FDCOUK:
         published = published.where(TeamMatch.source == "fdcouk")

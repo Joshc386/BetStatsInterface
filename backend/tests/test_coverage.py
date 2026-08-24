@@ -15,6 +15,7 @@ from ingestion.coverage import (
     find_gaps,
     KNOWN_GAP_AFTER,
     PLAYER_FBREF,
+    TEAM_ANY,
     TEAM_FDCOUK,
     Gap,
     classify,
@@ -36,13 +37,14 @@ NOW = dt.datetime(2026, 8, 23, 9, 0, tzinfo=dt.timezone.utc)
 # --- what each source owes -------------------------------------------------
 
 
-def test_covered_league_owes_both_sources():
-    assert expected_sources("Premier League", "club_league", "E0") == frozenset(
-        {TEAM_FDCOUK, PLAYER_FBREF}
-    )
-    assert expected_sources("Championship", "club_league", "E1") == frozenset(
-        {TEAM_FDCOUK, PLAYER_FBREF}
-    )
+def test_covered_league_owes_every_source():
+    """TEAM_ANY joined the set with docs/adr/0015: a played league Fixture owes
+    team data from SOMEWHERE (ESPN, all four tiers) as well as specifically
+    from football-data.co.uk (the historical record) and FBref (players)."""
+    for comp, key in (("Premier League", "E0"), ("Championship", "E1")):
+        assert expected_sources(comp, "club_league", key) == frozenset(
+            {TEAM_ANY, TEAM_FDCOUK, PLAYER_FBREF}
+        )
 
 
 def test_lower_tiers_owe_team_data_but_not_player_data():
@@ -206,3 +208,65 @@ def test_every_team_match_row_declares_a_source():
                 TeamMatch.source.is_(None)
             )
         ) == 0
+
+
+# --- TEAM_ANY: the gap that is actually worth alarming on (docs/adr/0015) ----
+
+
+def test_every_league_fixture_owes_team_data_from_some_source():
+    """ESPN covers all four tiers, so unlike TEAM_FDCOUK (which needs a CSV
+    key) this is owed everywhere — including League One and Two."""
+    for comp, key in (("Premier League", "E0"), ("League Two", "E3")):
+        assert TEAM_ANY in expected_sources(comp, "club_league", key)
+
+
+def test_team_any_is_not_owed_outside_the_leagues():
+    """Cup, European and international team rows come from cached FBref pages
+    on a different schedule; this alarm is a club_league decision only."""
+    for comp, ctype in (("FA Cup", "club_cup"), ("World Cup", "international")):
+        assert TEAM_ANY not in expected_sources(comp, ctype, None)
+
+
+def test_an_espn_row_satisfies_team_any_but_not_team_fdcouk():
+    """The whole point of the split. A Fixture ESPN has covered is NOT a
+    product gap, so it must not page anyone — while football-data.co.uk's
+    silence stays visible, because an outage absorbed is an outage repeated."""
+    with SessionLocal() as session:
+        fixture_id = session.scalar(
+            select(TeamMatch.fixture_id)
+            .join(Fixture, Fixture.id == TeamMatch.fixture_id)
+            .where(
+                TeamMatch.source == "fdcouk",
+                TeamMatch.competition_type == "club_league",
+                Fixture.status == "finished",
+            )
+            .limit(1)
+        )
+        session.execute(
+            update(TeamMatch)
+            .where(TeamMatch.fixture_id == fixture_id)
+            .values(source="espn")
+        )
+        session.flush()
+
+        assert fixture_id in {g.fixture_id for g in find_gaps(session, TEAM_FDCOUK)}
+        assert fixture_id not in {g.fixture_id for g in find_gaps(session, TEAM_ANY)}
+
+        session.rollback()
+
+
+def test_nightly_alarms_on_missing_team_data_not_on_fdcouk_lateness():
+    """Regression for the alarm that would otherwise fire every morning:
+    football-data.co.uk published nothing between 20 and 24 Aug 2026 and never
+    published E0 for 2026-27, none of which degrades anything now."""
+    from ingestion import nightly
+
+    with SessionLocal() as session:
+        fdcouk_late = find_gaps(session, TEAM_FDCOUK)
+        no_data_at_all = find_gaps(session, TEAM_ANY)
+
+    assert len(fdcouk_late) >= len(no_data_at_all), (
+        "TEAM_ANY must be a subset of TEAM_FDCOUK: a Fixture with no row at all "
+        "necessarily has no fd.co.uk row"
+    )
+    assert nightly._audit_team_coverage is not None

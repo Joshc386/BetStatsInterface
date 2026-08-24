@@ -213,12 +213,18 @@ def test_a_dead_points_source_does_not_mask_the_fdcouk_alarm(monkeypatch):
         nightly.run_nightly(now=NOW, log=lambda *a, **k: None, audit=_no_gaps)
 
 
-def test_nightly_alarms_when_fdcouk_is_behind_on_individual_fixtures(monkeypatch):
+def test_nightly_alarms_when_a_played_fixture_has_no_team_data_at_all(monkeypatch):
     """Partial publication is the case the fetch check cannot see (ADR 0014).
 
     football-data.co.uk published 12 of 23 Championship games on 2026-08-23.
     Nothing was "skipped" — the CSV existed and parsed — so unexpected_skips had
     nothing to report, and the other 11 fixtures were silently missing.
+
+    What is FATAL changed with docs/adr/0015. fd.co.uk being late no longer
+    degrades anything (ESPN fills the Fixture within hours and fd.co.uk reclaims
+    it later), so its gaps are reported but never raise — left fatal they would
+    fire every morning. A Fixture with no team row from ANY source still raises:
+    that is the product genuinely missing data.
     """
     monkeypatch.setattr(
         nightly.team_match,
@@ -235,10 +241,10 @@ def test_nightly_alarms_when_fdcouk_is_behind_on_individual_fixtures(monkeypatch
             competition="Championship",
             season="2627",
             date=NOW - dt.timedelta(days=3),
-            source=coverage.TEAM_FDCOUK,
+            source=coverage.TEAM_ANY,
         )
     ]
-    with pytest.raises(RuntimeError, match="has not published"):
+    with pytest.raises(RuntimeError, match="NO team data"):
         nightly.run_nightly(
             now=NOW, log=lambda *a, **k: None, audit=lambda now, log: late
         )
