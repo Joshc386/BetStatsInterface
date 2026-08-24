@@ -651,6 +651,9 @@ def backfill_cup_team_match(
                     "team_id": team_id,
                     "opponent_id": opp_id,
                     "is_home": is_home,
+                    # Cup, European and international team rows are derived
+                    # from cached FBref match pages (docs/adr/0015).
+                    "source": "fbref",
                     "gf": gf,
                     "ga": ga,
                     "shots": own["shots"],
@@ -667,7 +670,10 @@ def backfill_cup_team_match(
                     .values(**vals)
                     .on_conflict_do_update(
                         constraint="uq_team_match",
-                        set_={k: vals[k] for k in (["date"] + _CUP_TEAM_METRICS)},
+                        set_={
+                            k: vals[k]
+                            for k in (["date", "source"] + _CUP_TEAM_METRICS)
+                        },
                     )
                 )
             session.commit()

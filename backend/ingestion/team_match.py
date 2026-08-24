@@ -173,6 +173,11 @@ def ingest_competition_season(
                 "team_id": team_id,
                 "opponent_id": opp_id,
                 "is_home": is_home,
+                # docs/adr/0015. football-data.co.uk is the historical
+                # authority, so it RECLAIMS a Fixture ESPN wrote earlier —
+                # `source` is in the update set precisely so the row stops
+                # claiming to be ESPN's when that happens.
+                "source": "fdcouk",
                 **{field: _to_int(row.get(col)) for field, col in cmap.items()},
             }
             session.execute(
@@ -180,7 +185,7 @@ def ingest_competition_season(
                 .values(**vals)
                 .on_conflict_do_update(
                     constraint="uq_team_match",
-                    set_={k: vals[k] for k in (["date"] + _METRIC_FIELDS)},
+                    set_={k: vals[k] for k in (["date", "source"] + _METRIC_FIELDS)},
                 )
             )
         n += 1
