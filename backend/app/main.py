@@ -1,8 +1,8 @@
 """Read-only FastAPI over Postgres. Serves Summary Metrics for teams and players.
 
-No external source is ever touched here — the API reads only from the local DB.
-Team data is live; player endpoints work identically and fill in once player_match
-is populated (pending FBref access).
+No external source is ever touched here — the API reads only from the local DB,
+which the scheduled ingestion jobs populate. Team and player endpoints share one
+windowing path, so they behave identically over their respective fact tables.
 """
 
 from __future__ import annotations

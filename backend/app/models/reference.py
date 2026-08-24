@@ -1,7 +1,9 @@
 """Reference tables: competitions, teams, players.
 
 These hold the canonical entities and the per-source identifier columns used to
-reconcile FBref / football-data.co.uk / FotMob source names to one canonical id.
+reconcile FBref / football-data.co.uk / ESPN source names to one canonical id.
+The `fotmob_id` columns are vestigial: FotMob was dropped as a source before any
+were populated (docs/adr/0002).
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ class Player(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
     fbref_id: Mapped[str | None] = mapped_column(Text, unique=True)
-    # Reserved for the deferred FotMob player-xG ingestion path (ADR 0001).
+    # Vestigial — FotMob was dropped before this was populated (ADR 0002).
     fotmob_id: Mapped[str | None] = mapped_column(Text)
     # Stamped by the roster job once a name resolves, so Squad membership never
     # depends on spelling again (ADR 0013). Only the four English tiers get one.

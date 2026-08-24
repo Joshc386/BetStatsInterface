@@ -1,32 +1,36 @@
-# React + TypeScript + Vite
+# BetStats — interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The React front end for [BetStats](../README.md). A read-only single-page application that talks to the local FastAPI and renders nothing it did not receive from it.
 
-Currently, two official plugins are available:
+Built with Vite, React, TypeScript and Tailwind. A single-page application was chosen over a server-rendered framework because the app is single-user, read-only and speaks only to a local API, so server-side rendering would add weight without buying anything.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Running it
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install && npm run dev -- --port 5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The API base URL comes from `VITE_API_BASE` and defaults to `http://localhost:8000`. Copy `.env.example` to `.env` to point it elsewhere. The backend's CORS policy allows port 5173 only, so use that port in development.
+
+Other scripts:
+
+```bash
+npm run build    # type-check and produce a production bundle
+npm run test     # vitest
+npm run lint     # oxlint
+```
+
+## Layout
+
+```
+src/
+  pages/         one file per surface: fixtures, team hub, player, fixture comparison, league table
+  components/    shared controls — search, window inputs, result chips
+  lib/           client-side aggregation and squad-membership logic, with unit tests
+  api.ts         typed fetch wrappers over the FastAPI endpoints
+  useCatalogue.ts  competitions, metrics and seasons, fetched once and shared
+```
+
+## Where the aggregation happens
+
+Most views ask the API for a summary and display it. The fixture comparison and squad-form panels are the exceptions: the API returns the raw per-game rows and the client aggregates them, so a user can change the scope, window length or threshold without another round trip. The reasoning is recorded in [ADR 0005](../docs/adr/0005-fixture-comparison-raw-rows-endpoint.md) and [ADR 0006](../docs/adr/0006-squad-form-from-appearances.md); the aggregation itself lives in `src/lib/aggregate.ts` and is unit-tested.

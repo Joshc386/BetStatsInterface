@@ -1,6 +1,6 @@
 # Squad form from appearances (no roster source in v1)
 
-**Status:** accepted — revisits ADR 0003 (which had leaned toward a FBref-squad-page roster job)
+**Status:** accepted — revisits ADR 0003 (which had leaned towards an FBref-squad-page roster job)
 
 The Squad-form panel needs to answer "who is in this club's squad, and how is each
 member performing?" for the **Fixture view** (both teams side by side) and the

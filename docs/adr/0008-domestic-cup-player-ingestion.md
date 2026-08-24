@@ -26,7 +26,7 @@ dedicated entrypoint that creates fixtures from the FBref cup schedule.**
   that season), so a club relegated out of the top two does not drag its cup ties in for
   an untracked season. This auto-excludes the lower-/non-league-only early rounds.
   `ingest_match` reads both squads, so the opponent's players (often League One/Two) come
-  along as a bonus toward future coverage. The filter loosens naturally once League
+  along as a bonus towards future coverage. The filter loosens naturally once League
   One/Two player data lands.
 - **Dedicated cup backfill entrypoint, not an extension of `link_fixtures`.** League and
   play-off ingestion *match* pre-existing football-data.co.uk fixtures; cups have none,

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 
-In the week of 22 January 2026, StatsPerform/Opta terminated FBref's data feed, and FBref removed all **modeled** advanced stats (xG, npxG, xAG, percentiles, advanced historical archives). FBref **retained** its event-count match stats — shots, shots on target, tackles, fouls committed/drawn, cards, minutes, goals, assists — verified directly against a recent Premier League match page. This invalidated the original spec's assumption that FBref supplies xG, and its non-negotiable that *all* player data comes from FBref unconditionally.
+In the week of 22 January 2026, StatsPerform/Opta terminated FBref's data feed, and FBref removed all **modelled** advanced stats (xG, npxG, xAG, percentiles, advanced historical archives). FBref **retained** its event-count match stats — shots, shots on target, tackles, fouls committed/drawn, cards, minutes, goals, assists — verified directly against a recent Premier League match page. This invalidated the original spec's assumption that FBref supplies xG, and its non-negotiable that *all* player data comes from FBref unconditionally.
 
 ## Decision
 
@@ -18,7 +18,7 @@ Source data per type, not per provider:
 
 ## Considered options
 
-- **WhoScored for xG** — rejected. Its site exposes only season-aggregate xG, which cannot be decomposed into the per-match rows our fact-table model requires. Its per-match event stream (`read_events`) could yield it, but that reader is Selenium-based, anti-bot-fragile, and ToS-gray — it contradicts the project's "boring, reliable pipeline" mandate.
+- **WhoScored for xG** — rejected. Its site exposes only season-aggregate xG, which cannot be decomposed into the per-match rows our fact-table model requires. Its per-match event stream (`read_events`) could yield it, but that reader is Selenium-based, anti-bot-fragile, and ToS-grey — it contradicts the project's "boring, reliable pipeline" mandate.
 - **Understat for player xG** — rejected as a v1 dependency. Shooting-only (no tackles/fouls/cards) and top-5 leagues only (no Championship). Viable as a later optional top-5 shooting module, not a foundation.
 - **Drop xG entirely** — rejected. Team xG is cheaply available from FotMob and is a high-value modern Metric.
 

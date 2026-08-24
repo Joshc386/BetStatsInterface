@@ -1,5 +1,13 @@
 # Player Prop Model — Feature → Target Metric Map
 
+> **Background research, not a build brief (superseded 2026-06).** This predates the
+> project's scope decisions and describes a predictive model that **is not part of
+> BetStats** — the platform surfaces observed metrics and hit rates, and deliberately
+> does not model or predict (see `CONTEXT.md`). Two of the sources named below are also
+> no longer available: FBref lost its Opta-derived stats in January 2026 and FotMob was
+> dropped as a source (`docs/adr/0001`, `docs/adr/0002`). Kept for the causal reasoning
+> behind each target metric, which still informs which metrics are worth surfacing.
+
 ## Framework
 
 Every target metric has two components to model separately:
@@ -19,7 +27,7 @@ Features should sit as close to the *cause* as possible, not just correlate with
 
 ## Target: Fouls Committed (1+)
 
-**Causal story:** A player fouls because they attempt defensive actions and either mistimes them or intentionally stops a dangerous situation. Foul rate = defensive action *volume* × defensive action *quality*.
+**Causal story:** A player fouls because they attempt defensive actions and either mistime them or deliberately stop a dangerous situation. Foul rate = defensive action *volume* × defensive action *quality*.
 
 ```
 Defensive role intensity

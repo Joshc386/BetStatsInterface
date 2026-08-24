@@ -1,7 +1,7 @@
 # Project Scope — Football Betting-Research Platform
 
 > ⚠️ **PARTIALLY SUPERSEDED (2026-06-19).** This is the original brief. Where it conflicts with the live docs, the live docs win:
-> - **Sources / xG / odds** → see `CLAUDE.md` "Data-source rules" and `docs/adr/0001-data-sources-after-fbref-opta-loss.md`. FBref lost xG (Jan 2026); team xG now from **FotMob**; player xG NULL in v1; **odds fully out of scope** (no `match_odds` table).
+> - **Sources / xG / odds** → see `CLAUDE.md` "Data-source rules" and `docs/adr/0001-data-sources-after-fbref-opta-loss.md`. FBref lost xG (Jan 2026); **xG is deferred out of v1 entirely** — team and player xG both stay NULL, and FotMob is no longer an option (`docs/adr/0002`); **odds fully out of scope** (no `match_odds` table).
 > - **Domain terms** (Metric / Summary Metric / Threshold / Rolling Window / Appearance) → see `CONTEXT.md`.
 > - Data model additions: `teams.fotmob_id`; `season` column on `team_match` / `player_match`.
 > - A full reconciliation pass over §5, §7, §8, §11 of this doc is pending before build.

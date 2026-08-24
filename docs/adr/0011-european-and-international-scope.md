@@ -1,6 +1,6 @@
-# European and international scope (scoped ahead of ingestion)
+# European and international scope
 
-**Status:** accepted (scope settled 2026-07-05; ingestion pending)
+**Status:** accepted (scope settled 2026-07-05; ingested 2026-07-21)
 
 The last two Competition Types with no data — `club_european` and `international` —
 scoped in full via a grill session so neither needs re-litigating when its build slot
@@ -166,7 +166,7 @@ colliding with an existing team's first-word guard token, never a duplicate).
   competitions) — the figure blends corners-complete confederations (UEFA,
   CONMEBOL) with corners-thin ones (CAF, CONCACAF, OFC minnows), consistent
   with the ADR's accepted minor-confederation metric sparsity.
-- **69 no-player-row fixtures** (28 WCQ + 41 AFCON Qualifying): a recognizable
+- **69 no-player-row fixtures** (28 WCQ + 41 AFCON Qualifying): a recognisable
   cluster of chronic African-qualifier withdrawals (Chad, Eritrea, Somalia,
   South Sudan, Burundi, Djibouti each account for 4-6) plus small-nation
   forfeits (Caribbean/Pacific minnows) and the **Russia suspension** carrying
@@ -206,7 +206,7 @@ six seasons deep.
   form-window option when data lands. Whole-match (ET-inclusive) Metric caveats apply as
   for cups.
 - Orphan rows accumulate by design (a Tajikistan qualifier's players, like a non-league
-  FA Cup opponent's today) — harmless bonus data toward future coverage.
+  FA Cup opponent's today) — harmless bonus data towards future coverage.
 - Build-time flags, deliberately not scoped here: `LEAGUE_DICT` entries per competition
   (10-minute spike each); a season-tagging convention for internationals (a June World
   Cup sits between club seasons); ESPN `espn_id` reconciliation before European/
