@@ -30,6 +30,7 @@ from app.models.enums import (
     competition_type_enum,
     fixture_status_enum,
     match_result_enum,
+    team_match_source_enum,
 )
 
 
@@ -55,6 +56,9 @@ class Fixture(Base):
     stage: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     fbref_match_id: Mapped[str | None] = mapped_column(Text)
     fdcouk_ref: Mapped[str | None] = mapped_column(Text)
+    # ESPN's per-match handle, stamped by `upcoming` (docs/adr/0015). What the
+    # ESPN team-stat writer looks the summary up by.
+    espn_event_id: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         UniqueConstraint(
@@ -98,6 +102,12 @@ class TeamMatch(Base):
     opponent_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
     is_home: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
+    # Which source produced this row (docs/adr/0015). Load-bearing, not
+    # bookkeeping: the coverage audit asks "has THIS source published?" and a
+    # row's existence alone cannot answer that once more than one writer can
+    # produce a club_league row.
+    source: Mapped[str] = mapped_column(team_match_source_enum, nullable=False)
+
     gf: Mapped[int | None] = mapped_column(SmallInteger)
     ga: Mapped[int | None] = mapped_column(SmallInteger)
     shots: Mapped[int | None] = mapped_column(SmallInteger)
@@ -108,7 +118,7 @@ class TeamMatch(Base):
     corners: Mapped[int | None] = mapped_column(SmallInteger)
     yellows: Mapped[int | None] = mapped_column(SmallInteger)
     reds: Mapped[int | None] = mapped_column(SmallInteger)
-    xg: Mapped[float | None] = mapped_column(Numeric(5, 2))  # FotMob; null if uncovered
+    xg: Mapped[float | None] = mapped_column(Numeric(5, 2))  # NULL in v1 (no source)
 
     # Generated (STORED) — cannot drift from inputs.
     clean_sheet: Mapped[bool | None] = mapped_column(
