@@ -34,9 +34,14 @@ from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Team
 
 
-def test_covered_team_ids_match_pl_and_championship_league_rows():
-    """A team is covered for a season iff it has a Premier League / Championship
-    team_match row that season — nothing lower, nothing from another season."""
+def test_covered_team_ids_match_all_four_english_tier_league_rows():
+    """A team is covered for a season iff it has a team_match row that season in
+    one of the four English tiers — nothing lower, nothing from another season.
+
+    The tier list is spelled out rather than read from COVERED_COMPETITIONS on
+    purpose: importing the constant would make this test agree with whatever the
+    constant happens to say, which is not a test.
+    """
     season = "2425"
     with SessionLocal() as session:
         covered = covered_team_ids(session, season)
@@ -46,25 +51,37 @@ def test_covered_team_ids_match_pl_and_championship_league_rows():
                 .join(Competition, Competition.id == TeamMatch.competition_id)
                 .where(
                     TeamMatch.season == season,
-                    Competition.name.in_(["Premier League", "Championship"]),
+                    Competition.name.in_(
+                        ["Premier League", "Championship", "League One", "League Two"]
+                    ),
                 )
             )
         )
         assert covered == expected and len(covered) > 0
 
 
-def test_covered_team_ids_excludes_some_lower_league_teams():
-    """The filter genuinely excludes — at least one team with a team_match row
-    that season is not covered (a League One/Two side)."""
+def test_covered_team_ids_still_excludes_cup_only_clubs():
+    """The filter genuinely excludes, even now the whole EFL is in scope.
+
+    This used to assert "some team with a team_match row is not covered", which
+    once L1/L2 joined would have passed on Argentina and Bayern Munich — true,
+    but nothing to do with the English pyramid. The real question is whether a
+    non-league club that appears ONLY as a cup opponent is still out, so that is
+    what is asked: in 2425 that is Dagenham & Redbridge and Tamworth.
+    """
     season = "2425"
     with SessionLocal() as session:
         covered = covered_team_ids(session, season)
-        any_team_match = set(
+        cup_only = set(
             session.scalars(
-                select(TeamMatch.team_id).where(TeamMatch.season == season)
+                select(TeamMatch.team_id)
+                .join(Competition, Competition.id == TeamMatch.competition_id)
+                .where(TeamMatch.season == season, Competition.type == "club_cup")
             )
-        )
-        assert any_team_match - covered  # non-empty: some teams are filtered out
+        ) - covered
+
+        assert cup_only, "no cup-only club excluded — the filter is doing nothing"
+        assert not (cup_only & covered)
 
 
 def test_already_ingested_skips_games_with_player_rows():
@@ -620,7 +637,9 @@ def test_covered_team_ids_historical_seasons_unchanged():
                 .join(Competition, Competition.id == TeamMatch.competition_id)
                 .where(
                     TeamMatch.season == season,
-                    Competition.name.in_(["Premier League", "Championship"]),
+                    Competition.name.in_(
+                        ["Premier League", "Championship", "League One", "League Two"]
+                    ),
                 )
             )
         )
