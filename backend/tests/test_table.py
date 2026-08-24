@@ -135,4 +135,29 @@ def test_as_of_bounds_the_window():
         )
     assert all(r["played"] == 38 for r in full)
     assert len(mid) == 20 and all(r["played"] < 38 for r in mid)
-    assert pre == []
+    # Before a ball is kicked the division still has 20 clubs, all on zero —
+    # membership comes from the fixture list, not from who has results. This
+    # returned [] until the table was made to show every club.
+    assert len(pre) == 20 and all(r["played"] == 0 for r in pre)
+    assert all(r["points"] == r["adjustment"] for r in pre)
+
+
+def test_every_club_in_the_division_appears_even_before_it_has_played():
+    """The 2026-27 Premier League showed 18 of 20 on the opening weekend —
+    Fulham and Chelsea were absent rather than sitting at the bottom on P0,
+    because the table was built from clubs with results. Membership is the
+    fixture list."""
+    with SessionLocal() as session:
+        comp_id = _competition_id(session, "Premier League")
+        table = league_table(session, competition_id=comp_id, season="2627")
+        assert len(table) == 20
+
+        played = [r for r in table if r["played"] > 0]
+        assert played, "sanity: some clubs have played"
+        # Anyone yet to play sorts below everyone on points, and carries zeroes
+        # rather than nulls so the UI needs no special case.
+        for row in table:
+            if row["played"] == 0:
+                assert (row["won"], row["drawn"], row["lost"]) == (0, 0, 0)
+                assert (row["gf"], row["ga"], row["gd"]) == (0, 0, 0)
+        assert [r["position"] for r in table] == list(range(1, 21))

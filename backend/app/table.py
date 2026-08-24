@@ -6,6 +6,13 @@ ingestion/points_adjustments.py) and apply in full even on `as_of` views:
 ruling dates aren't stored, so a mid-season historical table shows the
 season's final adjustment. Ordering is the English league tie-break:
 points, goal difference, goals for, then name.
+
+Every club in the division appears, including one that has not played yet —
+sitting at P0 rather than being absent. Membership comes from the season's
+FIXTURES, not from team_match: a table built only from clubs with results is
+short at the start of a season (the 2026-27 Premier League showed 18 of 20 on
+the opening weekend) and silently omits a club whose opening game was
+postponed.
 """
 
 from __future__ import annotations
@@ -15,7 +22,7 @@ import datetime as dt
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.models.facts import PointsAdjustment, TeamMatch
+from app.models.facts import Fixture, PointsAdjustment, TeamMatch
 from app.models.reference import Team
 
 
@@ -78,8 +85,28 @@ def league_table(
         )
     }
 
+    # Division membership is the season's fixture list, and is deliberately NOT
+    # bounded by `as_of`: who is in the league does not change mid-season, only
+    # what they have played by a given date.
+    members: set[int] = set()
+    for home_id, away_id in session.execute(
+        select(Fixture.home_team_id, Fixture.away_team_id).where(
+            Fixture.competition_id == competition_id,
+            Fixture.season == season,
+        )
+    ):
+        members.update((home_id, away_id))
+
+    unplayed = members - {row[0] for row in rows}
+    blank = [
+        (team_id, name, 0, 0, 0, 0, 0, 0)
+        for team_id, name in session.execute(
+            select(Team.id, Team.canonical_name).where(Team.id.in_(unplayed))
+        )
+    ] if unplayed else []
+
     table = []
-    for team_id, name, played, w, d, l, gf, ga in rows:
+    for team_id, name, played, w, d, l, gf, ga in list(rows) + blank:
         adj, note = adjustments.get(team_id, (0, None))
         table.append(
             {
