@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models.reference import Competition
-from app.table import league_table
+from app.table import league_seasons, league_table
 
 
 def _competition_id(session, name: str) -> int:
@@ -93,12 +93,25 @@ def test_table_endpoint_defaults_and_guards():
     from app.main import table
 
     with SessionLocal() as session:
+        comp_id = _competition_id(session, "Premier League")
+
+        # The default is the latest season we hold rows for, computed rather
+        # than named: this used to assert "20 clubs on 38 games" because the
+        # latest happened to be the completed 2526, which stopped being true
+        # the moment 2026-27 team data arrived (docs/adr/0015).
+        latest = league_seasons(session, comp_id)[-1]
         rows = table(
-            competition_id=_competition_id(session, "Premier League"),
-            season=None, as_of=None, session=session,
+            competition_id=comp_id, season=None, as_of=None, session=session
         )
-        assert len(rows) == 20 and rows[0].position == 1
-        assert {r.played for r in rows} == {38}  # latest = completed 2526
+        expected = league_table(session, competition_id=comp_id, season=latest)
+        assert [r.position for r in rows] == list(range(1, len(rows) + 1))
+        assert [r.team_name for r in rows] == [r["team_name"] for r in expected]
+
+        # A COMPLETED season is the stable shape check — 20 clubs, 38 games.
+        done = table(
+            competition_id=comp_id, season="2526", as_of=None, session=session
+        )
+        assert len(done) == 20 and {r.played for r in done} == {38}
 
         fa_cup = session.scalars(
             select(Competition.id).where(Competition.name == "FA Cup")

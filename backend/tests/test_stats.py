@@ -9,12 +9,24 @@ from app.stats import entity_summary, registry
 
 
 def _a_team_with_data(session) -> int:
+    # ORDER BY is load-bearing: an unordered LIMIT 1 picks whichever row the
+    # heap happens to yield, so a migration that rewrites the table silently
+    # changes which team these tests exercise.
     return session.scalar(
-        select(TeamMatch.team_id).where(TeamMatch.competition_type == "club_league").limit(1)
+        select(TeamMatch.team_id)
+        .where(TeamMatch.competition_type == "club_league")
+        .order_by(TeamMatch.team_id)
+        .limit(1)
     )
 
 
 def test_team_summary_matches_direct_query():
+    """entity_summary defaults to ALL competitions, so the hand-written query it
+    is checked against must not filter to club_league — that mismatch made this
+    test pass or fail on whether the chosen team happened to have a cup tie in
+    its last 10. NULLs are excluded from total/average but still counted as
+    games, which is stats.py's actual contract (a sparse row shrinks the sample
+    rather than scoring zero)."""
     s = SessionLocal()
     try:
         tid = _a_team_with_data(s)
@@ -22,13 +34,14 @@ def test_team_summary_matches_direct_query():
         direct = [
             c for (c,) in s.execute(
                 select(TeamMatch.corners)
-                .where(TeamMatch.team_id == tid, TeamMatch.competition_type == "club_league")
+                .where(TeamMatch.team_id == tid)
                 .order_by(TeamMatch.date.desc()).limit(10)
             ).all()
         ]
+        values = [c for c in direct if c is not None]
         assert res["games"] == len(direct)
-        assert res["total"] == sum(direct)
-        assert res["average"] == sum(direct) / len(direct)
+        assert res["total"] == sum(values)
+        assert res["average"] == sum(values) / len(values)
     finally:
         s.close()
 
