@@ -1,0 +1,121 @@
+{
+  "header": {
+    "competitions": [
+      {
+        "status": {
+          "type": {
+            "name": "STATUS_FULL_TIME"
+          }
+        },
+        "competitors": [
+          {
+            "homeAway": "home",
+            "score": "4",
+            "team": {
+              "id": "331",
+              "displayName": "Brighton & Hove Albion"
+            }
+          },
+          {
+            "homeAway": "away",
+            "score": "0",
+            "team": {
+              "id": "362",
+              "displayName": "Aston Villa"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "boxscore": {
+    "teams": [
+      {
+        "team": {
+          "id": "331",
+          "displayName": "Brighton & Hove Albion"
+        },
+        "statistics": [
+          {
+            "name": "foulsCommitted",
+            "displayValue": "12",
+            "label": "Fouls"
+          },
+          {
+            "name": "yellowCards",
+            "displayValue": "2",
+            "label": "Yellow Cards"
+          },
+          {
+            "name": "redCards",
+            "displayValue": "0",
+            "label": "Red Cards"
+          },
+          {
+            "name": "wonCorners",
+            "displayValue": "5",
+            "label": "Corner Kicks"
+          },
+          {
+            "name": "possessionPct",
+            "displayValue": "72.9",
+            "label": "Possession"
+          },
+          {
+            "name": "totalShots",
+            "displayValue": "21",
+            "label": "SHOTS"
+          },
+          {
+            "name": "shotsOnTarget",
+            "displayValue": "6",
+            "label": "ON GOAL"
+          }
+        ]
+      },
+      {
+        "team": {
+          "id": "362",
+          "displayName": "Aston Villa"
+        },
+        "statistics": [
+          {
+            "name": "foulsCommitted",
+            "displayValue": "9",
+            "label": "Fouls"
+          },
+          {
+            "name": "yellowCards",
+            "displayValue": "3",
+            "label": "Yellow Cards"
+          },
+          {
+            "name": "redCards",
+            "displayValue": "1",
+            "label": "Red Cards"
+          },
+          {
+            "name": "wonCorners",
+            "displayValue": "2",
+            "label": "Corner Kicks"
+          },
+          {
+            "name": "possessionPct",
+            "displayValue": "27.1",
+            "label": "Possession"
+          },
+          {
+            "name": "totalShots",
+            "displayValue": "6",
+            "label": "SHOTS"
+          },
+          {
+            "name": "shotsOnTarget",
+            "displayValue": "0",
+            "label": "ON GOAL"
+          }
+        ]
+      }
+    ]
+  }
+}

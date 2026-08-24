@@ -159,6 +159,10 @@ class ScheduledEvent:
     home_names: tuple[str, str]  # (displayName, shortDisplayName)
     away_names: tuple[str, str]
     finished: bool = False
+    # ESPN's handle for this match. Carried so the Fixture can be stamped with
+    # it (docs/adr/0015) rather than a later job re-fetching a scoreboard to
+    # rediscover an identity we already have.
+    espn_event_id: str | None = None
 
 
 def espn_json(url: str, *, timeout: int = 30) -> dict:
@@ -289,6 +293,7 @@ def parse_scoreboard(
                 home_names=(home["displayName"], home["shortDisplayName"]),
                 away_names=(away["displayName"], away["shortDisplayName"]),
                 finished=finished,
+                espn_event_id=str(event["id"]) if event.get("id") else None,
             )
         )
     return out
@@ -340,6 +345,7 @@ def upsert_event(
     away_id: int,
     date: dt.datetime,
     finished: bool = False,
+    espn_event_id: str | None = None,
 ) -> str:
     """Create/update one scheduled fixture on the natural key.
 
@@ -381,10 +387,19 @@ def upsert_event(
                 home_team_id=home_id,
                 away_team_id=away_id,
                 status="finished" if finished else "scheduled",
+                espn_event_id=espn_event_id,
             )
         )
         session.flush()
         return "created"
+    # Stamped on every path, INCLUDING the finished one. The id is identity,
+    # not schedule — nothing about the match changes by recording it — and the
+    # backlog this rescues (played Fixtures football-data.co.uk never
+    # published) is finished by definition, so a finished-skips-everything rule
+    # would leave exactly those Fixtures permanently unreachable (ADR 0015).
+    if espn_event_id and fixture.espn_event_id != espn_event_id:
+        fixture.espn_event_id = espn_event_id
+        session.flush()
     if fixture.status == "finished":
         return "skipped_finished"
     if finished:
@@ -552,6 +567,7 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                         upsert_event(
                             session, competition, home.id, away.id, ev.date,
                             finished=ev.finished,
+                            espn_event_id=ev.espn_event_id,
                         )
                     ] += 1
             else:
@@ -566,6 +582,7 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                         upsert_event(
                             session, competition, home.id, away.id, ev.date,
                             finished=ev.finished,
+                            espn_event_id=ev.espn_event_id,
                         )
                     ] += 1
             if unknown and not is_cup:
@@ -607,6 +624,33 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     if stalled_all:
         report["_stalled"] = stalled_all
     return report
+
+
+def run_espn_team_rows(log=print) -> dict:
+    """Write ESPN Team-Match rows for league Fixtures now known to be played.
+
+    Lives here because `upcoming` is what marks a league Fixture finished, so
+    it is the job that knows the moment a match becomes ingestable — and it has
+    just refreshed the ESPN ids these rows are looked up by. No new scheduled
+    job, no second slate fetch (docs/adr/0015).
+
+    Imported inside the function: `espn_team_match` imports `espn_json` and
+    `ESPN_LEAGUES` from this module, so a top-level import here would be a
+    cycle that only failed on import ORDER — precisely the trap
+    `tests/test_import_hygiene.py` exists to catch.
+
+    NEVER raises. The slate is the load-bearing output — matchday's pending
+    probe reads it, so losing it stalls the FBref player pipeline as well
+    (ADR 0014). Team stats are an enrichment; their failure is reported, not
+    propagated.
+    """
+    from ingestion import espn_team_match
+
+    try:
+        return espn_team_match.ingest(log=log)
+    except Exception as exc:  # noqa: BLE001 - deliberately never fatal
+        log(f"[espn-team] FAILED (slate is unaffected): {exc}")
+        return {"error": str(exc)}
 
 
 def european_pending_events(
@@ -685,6 +729,10 @@ if __name__ == "__main__":
 
     window = int(sys.argv[1]) if len(sys.argv) > 1 else 45
     result = ingest_upcoming(window)
+    # Team rows LAST: the slate must be current (and its ESPN ids stamped)
+    # before there is anything to look up.
+    result["_espn_team_rows"] = run_espn_team_rows()
+    print(f"  espn team rows -> {result['_espn_team_rows']}")
     # A cup slate commits what it could resolve rather than rolling back, so the
     # exit code is the only thing that turns leftover alias work into an alarm.
     # Leftover alias work, or a slate that has stopped marking played matches
