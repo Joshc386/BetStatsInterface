@@ -137,7 +137,12 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # NB the checker's fuzzy suggestion for this one was "Sheffield United", which
     # would have mapped Southend's players onto a Premier League club. The
     # suggestion is a starting point; confirm it against `teams` before pasting.
+    # All three are clubs football-data.co.uk names without the suffix that FBref
+    # keeps, and all three spent part of the backfill range outside the EFL —
+    # which is why no earlier cup or league pass had ever met them.
     "Southend United": "Southend",  # schedule spelling -> fd.co.uk canonical
+    "Scunthorpe United": "Scunthorpe",  # player-df; relegated to the NL in 2022
+    "York City": "York",  # player-df; promoted back for 2026-27
     # European opponents (ADR 0011) — the same two-spelling trap at continental
     # scale: the FBref schedule spells foreign clubs SHORT (which auto-creates
     # the canonical row) while the per-match player df spells them in FULL, so
