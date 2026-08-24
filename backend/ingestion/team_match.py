@@ -57,12 +57,57 @@ CSV_CORRECTIONS: dict[tuple[str, str, str, str], dict[str, int]] = {
     ("E0", "2324", "Arsenal", "Burnley"): {"HC": 13},
     # ESPN: Everton 4, Man City 8; CSV has home/away swapped.
     ("E0", "2324", "Everton", "Man City"): {"HC": 4, "AC": 8},
-    # ESPN: Hull 2, Preston 11; CSV says 7-2.
-    ("E1", "2324", "Hull", "Preston"): {"HC": 2, "AC": 11},
-    # Final-day 2526: the CSV crossed these two matches' corner values.
-    # ESPN: Sunderland 6, Chelsea 2 / Opta+ESPN: Tottenham 7, Everton 7.
-    ("E0", "2526", "Sunderland", "Chelsea"): {"HC": 6, "AC": 2},
-    ("E0", "2526", "Tottenham", "Everton"): {"HC": 7, "AC": 7},
+    #
+    # --- 2026-08-24 sweep: every league Fixture where fd.co.uk and FBref's
+    # player-sums disagreed by 5+ on a metric, with ESPN as arbiter. Only
+    # recorded where TWO sources agree against the third; smaller gaps (2-4)
+    # are deliberately NOT corrected — at that size FBref is wrong about as
+    # often as fd.co.uk, so a majority vote stops being evidence.
+    #
+    ("E0", "2021", "Crystal Palace", "Leeds"): {"AF": 16},   # Leeds fouls 1
+    ("E0", "2021", "Man United", "Aston Villa"): {"AS": 15},  # Villa shots 5
+    ("E1", "2021", "Bournemouth", "Middlesbrough"): {"HF": 14},  # fouls 4
+    ("E0", "2021", "Leeds", "Liverpool"): {"HF": 7},          # Leeds fouls 17
+    ("E0", "2122", "Newcastle", "West Ham"): {"AS": 18},      # shots 8
+    ("E0", "2122", "West Ham", "Leicester"): {"HS": 19},      # shots 13
+    ("E0", "2122", "Aston Villa", "Tottenham"): {"HS": 19},   # shots 9
+    ("E1", "2223", "Bristol City", "Huddersfield"): {"AF": 3},  # fouls 13
+    ("E0", "2223", "Aston Villa", "Leeds"): {"AF": 18},       # Leeds fouls 8
+    ("E1", "2324", "Bristol City", "Birmingham"): {"HS": 9},  # shots 19
+    ("E1", "2324", "Huddersfield", "Cardiff"): {"AF": 10},    # Cardiff fouls 19
+    ("E1", "2324", "Birmingham", "Sheffield Weds"): {"AY": 5},  # yellows 0
+    ("E1", "2324", "Blackburn", "QPR"): {"AS": 17},           # QPR shots 7
+    ("E1", "2324", "Leeds", "Hull"): {"HF": 9},               # Leeds fouls 19
+    ("E0", "2425", "Everton", "Bournemouth"): {"AF": 11},     # fouls 1
+    ("E0", "2425", "Man United", "Brentford"): {"HF": 4},     # fouls 14
+    ("E0", "2425", "Arsenal", "Nott'm Forest"): {"AF": 11},   # fouls 1
+    #
+    # --- CROSSED FIXTURES. fd.co.uk published one match's whole event block
+    # against another's. Goals and corners were unaffected in the 2324 pair
+    # (its corner cells were already corrected below), which is why this went
+    # unnoticed: only the shots/SoT/fouls/cards block moved.
+    #
+    # 2023-10-28: Hull v Preston carries Watford v Millwall's figures VERBATIM
+    # — confirmed in the raw CSV, so this is upstream, not our ingest.
+    ("E1", "2324", "Hull", "Preston"): {
+        "HC": 2, "AC": 11,
+        "HS": 11, "HST": 2, "HF": 8,
+        "AS": 7, "AST": 1, "AF": 20, "AY": 4,
+    },
+    # Final-day 2526: these two matches' values are SWAPPED with each other
+    # (not duplicated), which is why a duplicate scan cannot see them — only
+    # cross-source comparison can. Corners were caught first; the rest of the
+    # block was still crossed until this sweep.
+    ("E0", "2526", "Sunderland", "Chelsea"): {
+        "HC": 6, "AC": 2,
+        "HS": 21, "HST": 6, "HY": 5,
+        "AS": 8, "AST": 3, "AF": 12, "AY": 3, "AR": 1,
+    },
+    ("E0", "2526", "Tottenham", "Everton"): {
+        "HC": 7, "AC": 7,
+        "HS": 20, "HST": 2, "HY": 3,
+        "AS": 10, "AST": 1, "AF": 18, "AY": 2, "AR": 0,
+    },
 }
 
 

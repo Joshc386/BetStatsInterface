@@ -11,6 +11,8 @@ import pandas as pd
 import pytest
 
 from ingestion.team_match import (
+    AWAY_MAP,
+    HOME_MAP,
     CSV_CORRECTIONS,
     CorrectionError,
     _parse_kickoff,
@@ -63,8 +65,10 @@ def test_apply_csv_corrections_overrides_known_bad_cells():
 
 
 def test_apply_csv_corrections_untouched_league_season_passes_through():
+    # E2/E3 carry no corrections: the sweep that found them compares against
+    # FBref player rows, which League One/Two do not have (ADR 0015).
     df = _csv_df([("Arsenal", "Burnley", 3, 3)])
-    out = apply_csv_corrections(df, "E1", "2021")  # no corrections registered
+    out = apply_csv_corrections(df, "E2", "2021")  # no corrections registered
     assert out.loc[0, "HC"] == 3
 
 
@@ -77,9 +81,16 @@ def test_apply_csv_corrections_fails_loud_when_fixture_missing():
 
 
 def test_csv_corrections_registry_shape():
-    """Every registered correction targets a known stat column with an int."""
+    """Every registered correction targets a column this ingest actually reads.
+
+    The valid set is derived from HOME_MAP/AWAY_MAP rather than restated, so a
+    correction naming a column we never ingest fails here instead of silently
+    doing nothing. Corrections were corners-only until the 2026-08-24 sweep
+    extended them across the whole event block.
+    """
+    valid = set(HOME_MAP.values()) | set(AWAY_MAP.values())
     for (key, season, home, away), fixes in CSV_CORRECTIONS.items():
         assert key in ("E0", "E1", "E2", "E3") and len(season) == 4
         assert home and away and fixes
         for col, val in fixes.items():
-            assert col in ("HC", "AC") and isinstance(val, int)
+            assert col in valid and isinstance(val, int)
