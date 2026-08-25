@@ -121,11 +121,22 @@ def test_upsert_event_stamps_the_event_id_on_the_fixture():
 
 
 def _brighton_villa(session) -> Fixture:
-    """The Fixture the sample payload describes: Brighton (331) v Villa (362),
-    2026-08-22, which football-data.co.uk had not published."""
-    return session.scalars(
-        select(Fixture).where(Fixture.id == 29033)
-    ).one()
+    """The Fixture the sample payload describes: Brighton (331) v Villa (362).
+
+    These tests need a Fixture that football-data.co.uk has NOT published, and
+    this one qualified when they were written on 2026-08-23. That was a claim
+    about live DB state with a shelf life, and it expired on 2026-08-24 when
+    fd.co.uk resumed publishing and reclaimed the Fixture — every write test
+    then returned 'skipped_fdcouk' and read exactly like a broken feature.
+
+    So the precondition is now ESTABLISHED rather than assumed: any existing
+    rows are cleared inside the transaction. Every test here rolls back, so
+    the real rows are untouched.
+    """
+    fixture = session.scalars(select(Fixture).where(Fixture.id == 29033)).one()
+    session.execute(delete(TeamMatch).where(TeamMatch.fixture_id == fixture.id))
+    session.flush()
+    return fixture
 
 
 def test_write_team_rows_writes_both_sides_stamped_espn():
