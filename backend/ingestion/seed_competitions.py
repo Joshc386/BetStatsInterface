@@ -1,4 +1,4 @@
-"""Seed the v1 competitions (top 4 English tiers + Championship play-offs).
+"""Seed the v1 competitions (top 4 English tiers + each division's play-offs).
 
 Idempotent: upserts on the unique competition name. Run after migrations:
     python -m ingestion.seed_competitions
@@ -15,8 +15,9 @@ from app.models.reference import Competition
 #   tier is the English-pyramid rank (league only); None for the knockouts.
 #   country is None for the UEFA competitions (not national competitions).
 #   fdcouk_key is None where football-data.co.uk doesn't cover the competition.
-#   fbref_key is None where the competition has no standalone FBref page — the
-#   play-offs are sourced from the Championship schedule (round = "play-offs").
+#   fbref_key is None where the competition has no standalone FBref page — each
+#   division's play-offs are sourced from THAT division's own league schedule
+#   (round = "Promotion play-offs — ..."), not from a page of their own.
 COMPETITIONS = [
     ("Premier League", "club_league", "England", 1, "E0", "Premier League"),
     ("Championship", "club_league", "England", 2, "E1", "Championship"),
@@ -25,7 +26,17 @@ COMPETITIONS = [
     # Promotion play-offs: 3rd-6th play two-legged semis + a Wembley final.
     # Domestic knockout (club_cup) so it never counts as league form; player
     # data only (football-data.co.uk has no play-off coverage).
+    #
+    # ONE PER EFL DIVISION, and the row's existence is load-bearing:
+    # `players.backfill_season` routes a schedule row whose `round` contains
+    # "play-off" to a Competition named f"{league} Play-offs", and DROPS it into
+    # `unmatched` when that competition is missing. Only the Championship was
+    # seeded until 2026-08-26, so League One and League Two silently lost 5
+    # fixtures per season for six seasons — every backfill logged "5 unmatched"
+    # and it was read past. FBref had the data all along.
     ("Championship Play-offs", "club_cup", "England", None, None, None),
+    ("League One Play-offs", "club_cup", "England", None, None, None),
+    ("League Two Play-offs", "club_cup", "England", None, None, None),
     # Domestic cups (ADR 0008): player-only, FBref-sourced (fbref_key set;
     # football-data.co.uk does not cover cups, so fdcouk_key=None). Distinct
     # competition_id keeps "FA Cup form" and "EFL Cup form" separable.
