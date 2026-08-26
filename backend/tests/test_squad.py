@@ -51,6 +51,7 @@ def test_a_recent_player_missing_from_the_roster_is_still_kept():
         recent_id = s.scalar(
             select(PlayerMatch.player_id)
             .where(PlayerMatch.team_id == team.id, PlayerMatch.date >= cutoff)
+            .order_by(PlayerMatch.player_id)
             .limit(1)
         )
         if recent_id is None:
@@ -78,6 +79,7 @@ def test_a_club_with_no_roster_falls_back_to_recent_squad():
         team_id = s.scalar(
             select(PlayerMatch.team_id)
             .where(PlayerMatch.team_id.notin_(rostered))
+            .order_by(PlayerMatch.team_id)
             .limit(1)
         )
         if team_id is None:

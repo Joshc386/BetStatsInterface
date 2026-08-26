@@ -421,7 +421,10 @@ def test_european_pending_ignores_ties_we_already_hold():
             select(Competition).where(Competition.name == "Champions League")
         )
         existing = session.scalars(
-            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+            select(Fixture)
+            .where(Fixture.competition_id == comp.id)
+            .order_by(Fixture.id)
+            .limit(1)
         ).one()
         covered = covered_team_ids(session, existing.season)
         if existing.home_team_id not in covered and existing.away_team_id not in covered:
@@ -445,7 +448,10 @@ def test_european_pending_flags_a_covered_tie_we_do_not_hold():
             select(Competition).where(Competition.name == "Champions League")
         )
         existing = session.scalars(
-            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+            select(Fixture)
+            .where(Fixture.competition_id == comp.id)
+            .order_by(Fixture.id)
+            .limit(1)
         ).one()
         covered = covered_team_ids(session, existing.season)
         if existing.home_team_id not in covered and existing.away_team_id not in covered:

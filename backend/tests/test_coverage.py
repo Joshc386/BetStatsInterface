@@ -151,6 +151,7 @@ def test_espn_team_row_does_not_satisfy_the_fdcouk_expectation():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         assert fixture_id is not None, "no fd.co.uk league rows to exercise"
@@ -186,6 +187,7 @@ def test_espn_team_row_does_not_disturb_the_fbref_player_audit():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         before = {g.fixture_id for g in find_gaps(session, PLAYER_FBREF)}
@@ -243,6 +245,7 @@ def test_an_espn_row_satisfies_team_any_but_not_team_fdcouk():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         session.execute(
