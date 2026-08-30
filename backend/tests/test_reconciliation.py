@@ -255,3 +255,34 @@ def test_no_phantom_clubs_carry_current_season_data():
         )
     finally:
         session.close()
+
+
+def test_an_adoptable_club_is_told_the_remedy_that_actually_works():
+    """A club auto-created by the CUP path carries fbref_id but no fdcouk_name.
+    When football-data.co.uk later serves that exact name, the lookup misses and
+    the token guard fires — correctly, since the club is already held.
+
+    But the generic guidance ("add a FDCOUK_TEAM_ALIASES entry") is a dead end
+    here: the names are IDENTICAL, so the alias maps the name to itself, the
+    lookup is still on fdcouk_name, and it still misses. Verified against the
+    real 2026-08 case (Boreham Wood, created by the FA Cup path) — only setting
+    fdcouk_name on the existing row resolves it.
+
+    So the adoptable case must be named separately and told what to do.
+    """
+    session = SessionLocal()
+    try:
+        held = Team(canonical_name="__ZZAdopt Wood__", fbref_id="__zzadopt__")
+        session.add(held)
+        session.flush()
+        assert held.fdcouk_name is None
+
+        with pytest.raises(UnknownFdcoukTeamError, match="fdcouk_name") as exc:
+            resolve_fdcouk_team(session, "__ZZAdopt Wood__")
+
+        message = str(exc.value)
+        assert str(held.id) in message          # names the row to fix
+        assert "FDCOUK_TEAM_ALIASES" not in message   # not the dead-end remedy
+    finally:
+        session.rollback()
+        session.close()
