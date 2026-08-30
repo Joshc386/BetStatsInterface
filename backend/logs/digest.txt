@@ -1,0 +1,6 @@
+﻿BetStats job digest — 30/08/2026 19:20, last 24h
+------------------------------------------------
+matchday: 1 failed of 1 run(s)
+  first 30/08 18:43  last 30/08 18:43
+  1x [watchdog] clean exit, no progress (4 still pending) — those fixtures have no fetchable FBref match; stopping.
+  1x [watchdog] clean exit, no progress (2 still pending) — those fixtures have no fetchable FBref match; stopping.

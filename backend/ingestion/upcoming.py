@@ -254,10 +254,21 @@ def stalled(
 
 
 def _is_placeholder(team: dict) -> bool:
-    """An undecided knockout slot — ESPN models it as a pseudo-team named
-    'Quarterfinal 2 Winner' / 'Semifinal 1 Loser' (with a real id). No nation
-    or club ends in Winner/Loser, so the suffix is the discriminator."""
-    return team["displayName"].endswith((" Winner", " Loser"))
+    """An undecided knockout slot, in either spelling ESPN uses.
+
+    Internationals get a pseudo-team named 'Quarterfinal 2 Winner' /
+    'Semifinal 1 Loser' (with a real id). No nation or club ends in
+    Winner/Loser, so the suffix is the discriminator.
+
+    The DOMESTIC cups spell it 'TBD Home' / 'TBD Away' instead, and recognising
+    only the international form cost six failure popups on 2026-08-27 alone:
+    the tie reached select_cup_events, resolved to no team while standing
+    opposite a COVERED club, and so was reported as alias work on every run
+    until the round was drawn. There is no alias to add — the tie has no
+    opponent yet. No club is named TBD-anything, so the prefix is safe.
+    """
+    name = team["displayName"]
+    return name.endswith((" Winner", " Loser")) or name.startswith("TBD")
 
 
 def parse_scoreboard(

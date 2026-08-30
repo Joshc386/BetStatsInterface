@@ -104,6 +104,19 @@ python -m venv .venv
 # team-match data (Phase 3 — football-data.co.uk, idempotent)
 .venv/Scripts/python.exe -m ingestion.team_match           # backfill team_match (6 seasons x 4 leagues)
 
+# FAILURE DIGEST (replaces the modal popup, removed 2026-08-30)
+# notify_failure.ps1 BLOCKED, so cmd.exe returned 0 and Task Scheduler's Last
+# Run Result read "success" while a modal sat unanswered. It also fired PER RUN,
+# and `upcoming` runs up to 15x a day (5 slots x 2 retries) -- one standing fault
+# became fifteen identical popups (six on 2026-08-27, for an EFL Cup tie that had
+# merely not been drawn yet). Now: no popups; Last Run Result is truthful; ask.
+.venv/Scripts/python.exe -m ingestion.digest        # last 24h across all 4 logs
+.venv/Scripts/python.exe -m ingestion.digest 336    # last 14 days
+# AUTOMATED: task "BetStats digest" runs backend/run_digest.cmd daily 09:30
+# (after squads 09:00, so the whole day is in) -> backend/logs/digest.txt, which
+# is utf-8-SIG so Windows tools render club names and em-dashes correctly.
+# Identical causes are COLLAPSED with a count, so a standing fault is one line.
+
 # quality
 .venv/Scripts/python.exe -m pytest                         # tests
 
@@ -182,7 +195,7 @@ python -m venv .venv
 # Membership = Squad ∪ anyone with an appearance in the last 30 days, so an
 # unmatched name degrades the panel to SLIGHTLY STALE, never to missing a player.
 # Exit 1 = a club's roster fetch failed -> that Squad is left STALE and the panel
-# shows it without complaint, hence the notifier.
+# shows it without complaint, hence the digest (below).
 # UNMATCHED NAMES ARE NORMAL (~519 of 2605, heavily League One/Two where we hold
 # little player data) — they surface in the panel as members with "—". Only add
 # an ESPN_PLAYER_ALIASES entry when it is a player we actually HOLD and the
@@ -210,7 +223,7 @@ python -m venv .venv
 # cups via the same zero-network DB probe the leagues use (their fixtures now
 # arrive from ESPN already finished), Europe via ESPN directly (signal only, no
 # rows written, main slugs only — never uefa.*_qual, which FBref does not carry).
-# A skipped tie now exits 1 -> notifier. A tie dropped on IDENTITY is not a skip:
+# A skipped tie now exits 1 -> shows in the digest. NOT a skip if dropped on IDENTITY:
 # FBref's cup schedule gives names only, and the non-league "Bournemouth"/
 # "Liverpool" read as the PL clubs, so coverage is re-checked against the match
 # page's real team ids and collisions are dropped quietly.

@@ -12,10 +12,9 @@ echo [%date% %time%] ingestion.nightly start >> logs\nightly.log
 ".venv\Scripts\python.exe" -m ingestion.nightly >> logs\nightly.log 2>&1
 set NL_EXIT=%errorlevel%
 echo [%date% %time%] exit code %NL_EXIT% >> logs\nightly.log
-if not %NL_EXIT%==0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0notify_failure.ps1" -Message "ingestion.nightly exited %NL_EXIT% - check backend\logs\nightly.log" -Title "BetStats nightly FAILED"
-)
-rem Hand Python's code back to Task Scheduler. Without this the wrapper ends on
-rem the notifier and cmd.exe returns 0, so Last Run Result read "success" on both
-rem mornings this job actually failed - the log line was the only honest signal.
+rem Hand Python's code back to Task Scheduler. The modal notifier used to sit
+rem here and BLOCK, so cmd.exe returned 0 and Last Run Result read "success" on
+rem both mornings this job actually failed. Popup removed 2026-08-30; failures
+rem are now reported by `python -m ingestion.digest`, and Last Run Result is
+rem finally truthful.
 exit /b %NL_EXIT%

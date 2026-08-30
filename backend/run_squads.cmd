@@ -24,10 +24,7 @@ set SQ_EXIT=%errorlevel%
 echo [%date% %time%] exit code %SQ_EXIT% >> logs\squads.log
 rem Non-zero means at least one club's roster fetch failed, which leaves that
 rem Squad STALE - and a stale Squad is shown by the panel without complaint, so
-rem the alarm has to be here rather than trusting anyone to read the log.
-if not %SQ_EXIT%==0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0notify_failure.ps1" -Message "ingestion.squads exited %SQ_EXIT% - check backend\logs\squads.log" -Title "BetStats squads FAILED"
-)
+rem the failure has to surface somewhere - it does, via ingestion.digest.
 rem As in run_nightly.cmd: without this, cmd.exe returns 0 and Task Scheduler's
 rem Last Run Result is meaningless as a health signal.
 exit /b %SQ_EXIT%
