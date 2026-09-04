@@ -36,3 +36,27 @@ def test_checking_nothing_is_not_a_pass(monkeypatch, capsys):
 
     assert exit_code != 0
     assert "Safe to backfill" not in capsys.readouterr().out
+
+
+def test_resolving_schedule_names_alone_is_not_a_pass(monkeypatch, capsys):
+    """The second half of the same false green, and the subtler half.
+
+    Names WERE read and every one of them resolved — but all of them came from
+    the schedule, because no match page was cached. The player-df spellings are
+    the ones that actually stop a backfill (they differ from the schedule's:
+    that is what FBREF_TEAM_ALIASES exists for), so this reports 0 gaps having
+    verified none of the spellings that matter.
+    """
+    monkeypatch.setattr(
+        verify_team_aliases, "_schedule_names", lambda key: {"Arsenal", "Chelsea"}
+    )
+    monkeypatch.setattr(
+        verify_team_aliases, "_match_page_names", lambda s, c: (set(), 0, 0)
+    )
+
+    exit_code = verify("Premier League", "ENG-Premier League")
+
+    out = capsys.readouterr().out
+    assert exit_code != 0
+    assert "Safe to backfill" not in out
+    assert "NO match pages were cached" in out

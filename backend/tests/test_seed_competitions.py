@@ -30,13 +30,18 @@ def test_playoffs_are_knockouts_that_no_csv_covers():
     """club_cup so play-off games never count as league form, and no fdcouk_key
     because football-data.co.uk does not publish the play-offs at all."""
     for division in DIVISIONS_WITH_PLAYOFFS:
-        _name, ctype, country, tier, fdcouk_key, _fbref_key = _BY_NAME[
+        _name, ctype, country, tier, fdcouk_key, fbref_key = _BY_NAME[
             f"{division} Play-offs"
         ]
         assert ctype == "club_cup"
         assert country == "England"
         assert tier is None          # tier belongs to the league, not its play-offs
         assert fdcouk_key is None
+        # No standalone FBref page either: the play-offs are sourced from THAT
+        # division's own league schedule (round = "Promotion play-offs — ...").
+        # A key here would send backfill_season looking for a page that is not
+        # there, so its absence is load-bearing, not an oversight.
+        assert fbref_key is None
 
 
 def test_the_premier_league_has_no_playoffs():
