@@ -62,8 +62,10 @@ def plan_competitions(
     """Resolve the ordered competition run-list (pure — no DB, no network).
 
     ``requested`` None -> everything with pending player work, in canonical order:
-    the leagues first (PL then Championship, the frequent case), then any cup or
-    European competition that has been played and not yet fetched. An explicit
+    the leagues first, in ``players.LEAGUE_IDS`` order (PL, Championship, League
+    One, League Two — highest tier first, so a round that runs short still gets
+    the most-used data), then any cup or European competition that has been
+    played and not yet fetched. An explicit
     list is validated against the supported set (fail loud on a typo or the
     deferred Super Cup) and its order is preserved — a cup evening runs exactly
     what you name.
