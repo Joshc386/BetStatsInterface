@@ -47,14 +47,17 @@ def test_covered_league_owes_every_source():
         )
 
 
-def test_lower_tiers_owe_team_data_but_not_player_data():
-    """The single most important line in the audit. L1/L2 player data is out of
-    scope by design — 6,649 finished Fixtures have no player rows and that is
-    CORRECT. Treating them as gaps would bury the real signal ~400:1."""
+def test_lower_tiers_now_owe_player_data_too():
+    """Inverted when L1/L2 entered the player scope. It used to be the audit's
+    most important line — 6,649 player-less Fixtures were CORRECT and calling
+    them gaps would have buried the real signal ~400:1. They are now genuinely
+    owed, and the backlog is held by KNOWN_GAP_AFTER rather than by scope: a
+    Fixture older than 14 days is a standing coverage figure that never alarms,
+    so the historical backfill can land season by season without nagging."""
     for comp, key in (("League One", "E2"), ("League Two", "E3")):
-        owed = expected_sources(comp, "club_league", key)
-        assert TEAM_FDCOUK in owed
-        assert PLAYER_FBREF not in owed
+        assert expected_sources(comp, "club_league", key) == frozenset(
+            {TEAM_ANY, TEAM_FDCOUK, PLAYER_FBREF}
+        )
 
 
 def test_non_league_scopes_owe_player_data_but_never_fdcouk():
@@ -148,6 +151,7 @@ def test_espn_team_row_does_not_satisfy_the_fdcouk_expectation():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         assert fixture_id is not None, "no fd.co.uk league rows to exercise"
@@ -183,6 +187,7 @@ def test_espn_team_row_does_not_disturb_the_fbref_player_audit():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         before = {g.fixture_id for g in find_gaps(session, PLAYER_FBREF)}
@@ -240,6 +245,7 @@ def test_an_espn_row_satisfies_team_any_but_not_team_fdcouk():
                 TeamMatch.competition_type == "club_league",
                 Fixture.status == "finished",
             )
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
         session.execute(

@@ -19,9 +19,6 @@ echo [%date% %time%] ingestion.matchday start >> logs\matchday.log
 ".venv\Scripts\python.exe" -m ingestion.matchday %* >> logs\matchday.log 2>&1
 set MD_EXIT=%errorlevel%
 echo [%date% %time%] exit code %MD_EXIT% >> logs\matchday.log
-if not %MD_EXIT%==0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0notify_failure.ps1" -Message "ingestion.matchday exited %MD_EXIT% - check backend\logs\matchday.log" -Title "BetStats matchday FAILED"
-)
 rem As in run_nightly.cmd: without this, cmd.exe returns 0 and Task Scheduler's
 rem Last Run Result is meaningless as a health signal.
 exit /b %MD_EXIT%

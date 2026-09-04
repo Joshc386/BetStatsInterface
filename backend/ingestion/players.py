@@ -128,6 +128,21 @@ FBREF_TEAM_ALIASES: dict[str, str] = {
     # EFL Cup 2023-24 draw.
     "Colchester United": "Colchester",  # player-df (existing canonical)
     "Northampton Town": "Northampton",  # player-df (existing canonical)
+    # League One / Two, from the pre-backfill mapping check (2026-08-24). Only ONE
+    # gap across 93 schedule spellings in the two divisions — the lower tiers are
+    # already well covered by the cup aliases above. Southend were relegated out of
+    # the EFL in 2021 and promoted back for 2026-27, so they appear at both ends of
+    # the backfill range.
+    #
+    # NB the checker's fuzzy suggestion for this one was "Sheffield United", which
+    # would have mapped Southend's players onto a Premier League club. The
+    # suggestion is a starting point; confirm it against `teams` before pasting.
+    # All three are clubs football-data.co.uk names without the suffix that FBref
+    # keeps, and all three spent part of the backfill range outside the EFL —
+    # which is why no earlier cup or league pass had ever met them.
+    "Southend United": "Southend",  # schedule spelling -> fd.co.uk canonical
+    "Scunthorpe United": "Scunthorpe",  # player-df; relegated to the NL in 2022
+    "York City": "York",  # player-df; promoted back for 2026-27
     # European opponents (ADR 0011) — the same two-spelling trap at continental
     # scale: the FBref schedule spells foreign clubs SHORT (which auto-creates
     # the canonical row) while the per-match player df spells them in FULL, so
@@ -756,11 +771,24 @@ def backfill_season(
 
 
 # Operator-facing: competitions this backfill can ingest -> soccerdata league id.
-# Both already have canonical teams + fixtures from football-data.co.uk, so they
-# reuse the existing reconciliation/linking path (no fixture-sourcing needed).
+# All four already have canonical teams + fixtures from football-data.co.uk, so
+# they reuse the existing reconciliation/linking path (no fixture-sourcing).
+#
+# ORDER IS LOAD-BEARING — it is the matchday run order (see plan_competitions),
+# so a round that runs short still gets the highest-value tiers first.
+#
+# League One / Two joined on 2026-08-24. The gate set by the 2026-08-03 grill
+# was 90% populated on Sh/SoT/TklW/Fls, measured per column per season on
+# lower-league-only pages; the spike returned 100% on every column, every
+# season, both divisions, and `min` was separately confirmed at 692/692. The
+# prior evidence against them was FA Cup ties containing Arsenal-Man United —
+# i.e. not lower-league pages at all. Cost: matchday goes ~932 -> ~2,036
+# matches/season (~6 -> ~13 min/round).
 LEAGUE_IDS = {
     "Premier League": "ENG-Premier League",
     "Championship": "ENG-Championship",
+    "League One": "ENG-League One",
+    "League Two": "ENG-League Two",
 }
 
 # The leagues whose player data is ingested automatically — the same set as

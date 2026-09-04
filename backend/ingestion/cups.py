@@ -55,8 +55,19 @@ from ingestion.players import (
 
 # A cup tie is "covered" when a side plays in one of these that season
 # (season-aware, so a relegated club stops dragging its cup ties in once it
-# leaves the tracked top two).
-COVERED_COMPETITIONS = ("Premier League", "Championship")
+# drops out of the tracked tiers — now the whole EFL, so that means dropping
+# into the National League).
+#
+# Widened from the top two on 2026-08-24, alongside players.LEAGUE_IDS. It cost
+# no extra fetching to widen: covered_team_ids reads team_match, and L1/L2 team
+# data has been complete for all six seasons since Phase 3. Worth ~70-90 extra
+# ties a season.
+COVERED_COMPETITIONS = (
+    "Premier League",
+    "Championship",
+    "League One",
+    "League Two",
+)
 
 
 def covered_fbref_ids(session: Session, season: str) -> set[str]:
@@ -127,7 +138,7 @@ def covered_divergence(session: Session, season: str) -> dict[str, tuple[int, in
 
 
 def covered_team_ids(session: Session, season: str, *, log=None) -> set[int]:
-    """Team ids playing Premier League / Championship football this season.
+    """Team ids playing in one of the four English tiers this season.
 
     These are the clubs whose cup ties are in scope; either side being covered
     pulls the tie in (and the opponent's players come along as a coverage bonus).

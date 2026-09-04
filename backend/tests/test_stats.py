@@ -1,5 +1,6 @@
 """Regression tests for the Summary Metric computation (needs team data loaded)."""
 
+import pytest
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
@@ -18,6 +19,17 @@ def _a_team_with_data(session) -> int:
         .order_by(TeamMatch.team_id)
         .limit(1)
     )
+
+
+def _a_player_with_data(session) -> int:
+    """Same ORDER BY reasoning as above. Skips rather than returning quietly:
+    a test that does nothing must not report as a pass."""
+    pid = session.scalar(
+        select(PlayerMatch.player_id).order_by(PlayerMatch.player_id).limit(1)
+    )
+    if pid is None:
+        pytest.skip("no player data loaded in this environment")
+    return pid
 
 
 def test_team_summary_matches_direct_query():
@@ -69,9 +81,7 @@ def test_goals_assists_registered_and_computable():
     assert "assists" in registry("player")
     s = SessionLocal()
     try:
-        pid = s.scalar(select(PlayerMatch.player_id).limit(1))
-        if pid is None:
-            return  # no player data loaded in this environment
+        pid = _a_player_with_data(s)
         res = entity_summary(s, entity="player", entity_id=pid, metric="goals", n=10)
         direct = [
             g for (g,) in s.execute(
@@ -139,9 +149,7 @@ def test_venue_split_partitions_and_opponent_narrows():
     filter must isolate exactly that opponent's meetings (filter-then-window)."""
     s = SessionLocal()
     try:
-        pid = s.scalar(select(PlayerMatch.player_id).limit(1))
-        if pid is None:
-            return  # no player data loaded in this environment
+        pid = _a_player_with_data(s)
         allv = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000)
         home = entity_summary(s, entity="player", entity_id=pid, metric="shots", n=10000,
                               is_home=True)
@@ -182,13 +190,23 @@ def test_competition_filter_narrows_to_a_single_competition():
     s = SessionLocal()
     try:
         # a team that has played in more than one competition
+        # team_id is the tie-break: many clubs share the top competition count,
+        # so ordering on the count alone still leaves the winner up to the heap.
         tid, _ = s.execute(
             select(TeamMatch.team_id, func.count(func.distinct(TeamMatch.competition_id)))
             .group_by(TeamMatch.team_id)
-            .order_by(func.count(func.distinct(TeamMatch.competition_id)).desc())
+            .order_by(
+                func.count(func.distinct(TeamMatch.competition_id)).desc(),
+                TeamMatch.team_id,
+            )
             .limit(1)
-        ).first()
-        comp = s.scalar(select(TeamMatch.competition_id).where(TeamMatch.team_id == tid).limit(1))
+        ).one()
+        comp = s.scalar(
+            select(TeamMatch.competition_id)
+            .where(TeamMatch.team_id == tid)
+            .order_by(TeamMatch.competition_id)
+            .limit(1)
+        )
         all_comp = entity_summary(s, entity="team", entity_id=tid, metric="total_goals", n=500)
         one_comp = entity_summary(s, entity="team", entity_id=tid, metric="total_goals", n=500,
                                   competition_id=comp)

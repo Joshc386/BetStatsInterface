@@ -20,13 +20,24 @@ from ingestion.matchday import (
 
 def test_default_plans_only_pending_leagues_in_canonical_order():
     """No explicit request -> the leagues that have pending player work, in the
-    fixed PL-then-Championship order (never the caller's set order)."""
+    fixed tier order (never the caller's set order)."""
     assert plan_competitions(None, pending_leagues={"Championship", "Premier League"}) == [
         "Premier League",
         "Championship",
     ]
     assert plan_competitions(None, pending_leagues={"Championship"}) == ["Championship"]
     assert plan_competitions(None, pending_leagues=set()) == []
+
+
+def test_lower_tiers_plan_after_the_top_two():
+    """League One / Two joined the player scope once the spike measured 100%
+    population on Sh/SoT/TklW/Fls/Min across all six seasons. Order is by tier,
+    so a matchday that runs short still gets the highest-value data first."""
+    assert plan_competitions(
+        None,
+        pending_leagues={"League Two", "League One", "Championship", "Premier League"},
+    ) == ["Premier League", "Championship", "League One", "League Two"]
+    assert plan_competitions(None, pending_leagues={"League Two"}) == ["League Two"]
 
 
 def test_explicit_request_is_validated_and_order_preserved():
@@ -49,7 +60,12 @@ def test_competition_sets_are_consistent():
     deferred UEFA Super Cup is not among them."""
     assert ALL_PLAYER_COMPETITIONS == LEAGUE_PLAYER_COMPETITIONS + CUP_PLAYER_COMPETITIONS
     assert "UEFA Super Cup" not in ALL_PLAYER_COMPETITIONS
-    assert LEAGUE_PLAYER_COMPETITIONS == ["Premier League", "Championship"]
+    assert LEAGUE_PLAYER_COMPETITIONS == [
+        "Premier League",
+        "Championship",
+        "League One",
+        "League Two",
+    ]
 
 
 # --- surfacing the work the unattended run will NOT do -------------------------

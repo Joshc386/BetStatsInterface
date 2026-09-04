@@ -103,6 +103,28 @@ def test_parse_scoreboard_drops_undecided_knockout_slots():
     assert events[0].home_names == ("Spain", "Spain")
 
 
+def test_parse_scoreboard_drops_domestic_cup_tbd_slots():
+    """The domestic cups spell the same idea differently: ESPN fills an undecided
+    League Cup slot with 'TBD Home' / 'TBD Away' rather than a 'Winner'/'Loser'
+    pseudo-team. Until 2026-08-30 only the international spelling was recognised,
+    so these reached select_cup_events, resolved to no team opposite a COVERED
+    club, and were reported as alias work — exiting 1 and firing the failure
+    notifier on every run until the round was drawn. Six times on 27 Aug alone:
+
+        2026-09-08 TBD Home v Leeds United: 'TBD Home' matched no team
+
+    There is no alias to add; the tie simply has no opponent yet.
+    """
+    payload = {"events": [
+        _wc_event(("359", "Leeds United", "Leeds"), ("371", "West Ham", "West Ham")),
+        _wc_event(("-1", "TBD Home", "TBD"), ("359", "Leeds United", "Leeds")),
+        _wc_event(("371", "West Ham United", "West Ham"), ("-2", "TBD Away", "TBD")),
+    ]}
+    events = parse_scoreboard(payload)
+    assert len(events) == 1
+    assert events[0].home_names == ("Leeds United", "Leeds")
+
+
 def test_resolve_espn_team_by_name_stamps_id():
     """First contact: no espn_id stored -> matched by normalised name
     (display or short), and the ESPN id is stamped for id-first resolution
@@ -421,7 +443,10 @@ def test_european_pending_ignores_ties_we_already_hold():
             select(Competition).where(Competition.name == "Champions League")
         )
         existing = session.scalars(
-            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+            select(Fixture)
+            .where(Fixture.competition_id == comp.id)
+            .order_by(Fixture.id)
+            .limit(1)
         ).one()
         covered = covered_team_ids(session, existing.season)
         if existing.home_team_id not in covered and existing.away_team_id not in covered:
@@ -445,7 +470,10 @@ def test_european_pending_flags_a_covered_tie_we_do_not_hold():
             select(Competition).where(Competition.name == "Champions League")
         )
         existing = session.scalars(
-            select(Fixture).where(Fixture.competition_id == comp.id).limit(1)
+            select(Fixture)
+            .where(Fixture.competition_id == comp.id)
+            .order_by(Fixture.id)
+            .limit(1)
         ).one()
         covered = covered_team_ids(session, existing.season)
         if existing.home_team_id not in covered and existing.away_team_id not in covered:

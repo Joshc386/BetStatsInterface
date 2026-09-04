@@ -3,6 +3,14 @@
 Function-level, against the real DB (rolled back where it writes — these only
 read). Mirrors the test_stats.py style: pick real teams with data, assert the
 contract against a direct query. See docs/adr/0005.
+
+CONVENTION — every pick is ORDERED and its precondition ASSERTED.
+An unordered ``LIMIT 1`` returns whatever Postgres reaches first, so the subject
+changes whenever a table is rewritten and a failure cannot be reproduced. Worse,
+a pick that silently returns None turns a missing-data problem into a confusing
+error deep inside the code under test. Both bite for real: on 2026-08-24 four
+sibling tests failed because live state had moved under them and the failure read
+exactly like a broken feature.
 """
 
 from sqlalchemy import select
@@ -17,14 +25,37 @@ def _a_pair_with_meetings(session) -> tuple[int, int]:
     home = session.scalar(
         select(TeamMatch.team_id)
         .where(TeamMatch.competition_type == "club_league")
+        .order_by(TeamMatch.team_id)
         .limit(1)
     )
+    assert home is not None, "no club_league team_match rows — nothing to test"
     away = session.scalar(
         select(TeamMatch.opponent_id)
         .where(TeamMatch.team_id == home)
+        .order_by(TeamMatch.opponent_id)
         .limit(1)
     )
+    assert away is not None, f"team {home} has no opponents — nothing to test"
     return home, away
+
+
+def _a_cup_pair(session) -> tuple[int, int]:
+    """A (team, opponent) pair where the team is guaranteed to have cup rows."""
+    team = session.scalar(
+        select(TeamMatch.team_id)
+        .where(TeamMatch.competition_type == "club_cup")
+        .order_by(TeamMatch.team_id)
+        .limit(1)
+    )
+    assert team is not None, "no club_cup team_match rows — nothing to test"
+    opponent = session.scalar(
+        select(TeamMatch.opponent_id)
+        .where(TeamMatch.team_id == team)
+        .order_by(TeamMatch.opponent_id)
+        .limit(1)
+    )
+    assert opponent is not None, f"team {team} has no opponents — nothing to test"
+    return team, opponent
 
 
 def test_home_block_is_that_teams_last_n_league_games():
@@ -76,15 +107,7 @@ def test_team_block_widens_to_cup_scope_when_requested():
     BOTH scopes — cup ties enter the window and displace older league games."""
     s = SessionLocal()
     try:
-        # a team guaranteed to have cup rows
-        team = s.scalar(
-            select(TeamMatch.team_id)
-            .where(TeamMatch.competition_type == "club_cup")
-            .limit(1)
-        )
-        opp = s.scalar(
-            select(TeamMatch.opponent_id).where(TeamMatch.team_id == team).limit(1)
-        )
+        team, opp = _a_cup_pair(s)
         scopes = ("club_league", "club_cup")
         res = fixture_comparison(s, home_id=team, away_id=opp, n=50, scopes=scopes)
 
@@ -117,14 +140,7 @@ def test_team_block_defaults_to_league_only():
     """No scopes argument -> unchanged league-only behaviour (the API default)."""
     s = SessionLocal()
     try:
-        team = s.scalar(
-            select(TeamMatch.team_id)
-            .where(TeamMatch.competition_type == "club_cup")
-            .limit(1)
-        )
-        opp = s.scalar(
-            select(TeamMatch.opponent_id).where(TeamMatch.team_id == team).limit(1)
-        )
+        team, opp = _a_cup_pair(s)
         res = fixture_comparison(s, home_id=team, away_id=opp, n=50)
         types = {
             s.execute(
@@ -177,8 +193,10 @@ def _two_teams_that_never_met(session) -> tuple[int, int]:
     home = session.scalar(
         select(TeamMatch.team_id)
         .where(TeamMatch.competition_type == "club_league")
+        .order_by(TeamMatch.team_id)
         .limit(1)
     )
+    assert home is not None, "no club_league team_match rows — nothing to test"
     opponents = session.execute(
         select(TeamMatch.opponent_id).where(TeamMatch.team_id == home).distinct()
     ).scalars().all()
@@ -189,6 +207,7 @@ def _two_teams_that_never_met(session) -> tuple[int, int]:
             TeamMatch.team_id != home,
             TeamMatch.team_id.not_in(opponents),
         )
+        .order_by(TeamMatch.team_id)
         .limit(1)
     )
     return home, away
@@ -216,6 +235,7 @@ def test_h2h_includes_cup_meetings():
         cup_row = s.execute(
             select(TeamMatch.team_id, TeamMatch.opponent_id, TeamMatch.fixture_id)
             .where(TeamMatch.competition_type == "club_cup")
+            .order_by(TeamMatch.fixture_id, TeamMatch.team_id)
             .limit(1)
         ).one()
         home, away, cup_fixture = cup_row
@@ -277,8 +297,10 @@ def test_fixture_detail_returns_exactly_both_sides():
         fixture_id = s.scalar(
             select(TeamMatch.fixture_id)
             .where(TeamMatch.team_id == home, TeamMatch.opponent_id == away)
+            .order_by(TeamMatch.fixture_id)
             .limit(1)
         )
+        assert fixture_id is not None, f"{home} v {away} have no meeting to detail"
         rows = fixture_detail(s, fixture_id=fixture_id)
 
         assert len(rows) == 2                                  # exactly two sides

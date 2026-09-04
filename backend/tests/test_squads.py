@@ -129,7 +129,7 @@ def test_refresh_squad_stamps_ids_and_writes_membership():
     """A matched player gets his espn_id stamped (so spelling never matters
     again) and a squads row; an unmatched roster entry is reported, not guessed."""
     with SessionLocal() as s:
-        team = s.scalars(select(Team).limit(1)).one()
+        team = s.scalars(select(Team).order_by(Team.id).limit(1)).one()
         known = _player(s, "Zz Testcase Player")
         roster = [
             RosterEntry("900001", "Zz Testcase Player", "M"),
@@ -156,7 +156,7 @@ def test_refresh_squad_deactivates_a_player_who_left():
     """A previous squad member absent from today's roster is marked inactive,
     not deleted — that is what makes a departure show up immediately."""
     with SessionLocal() as s:
-        team = s.scalars(select(Team).limit(1)).one()
+        team = s.scalars(select(Team).order_by(Team.id).limit(1)).one()
         gone = _player(s, "Zz Departed Player", espn_id="900003")
         s.add(Squad(team_id=team.id, player_id=gone.id, active=True,
                     last_seen=dt.date(2026, 8, 1)))

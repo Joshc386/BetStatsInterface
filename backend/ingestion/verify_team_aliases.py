@@ -27,6 +27,7 @@ from app.db import SessionLocal
 from app.models.facts import Fixture
 from app.models.reference import Competition, Team
 from ingestion.players import (
+    LEAGUE_IDS,
     UnknownTeamError,
     canonical_team_name,
     resolve_fbref_team,
@@ -125,7 +126,17 @@ def verify(competition_name: str, league_key: str | None = None) -> int:
                 gaps.append((name, suggestion[0] if suggestion else "?"))
 
     print(f"\nchecked {len(all_names)} unique team names across both sources")
+    if not all_names:
+        # Nothing was read, so nothing was verified. Reporting this as a pass
+        # would satisfy the iron rule vacuously and green-light a 28-hour run.
+        print("FAIL: no team names found in either source — nothing was checked.")
+        return 1
     if not gaps:
+        if cached == 0:
+            print("Schedule spellings all resolve, but NO match pages were cached, "
+                  "so the player-df spellings are still unverified. Run a small "
+                  "discovery backfill, then re-check before the full run.")
+            return 1
         print("OK — every team name resolves. Safe to backfill.")
         return 0
     print(f"GAPS ({len(gaps)}) — add to FBREF_TEAM_ALIASES before backfill:")
@@ -134,11 +145,14 @@ def verify(competition_name: str, league_key: str | None = None) -> int:
     return 1
 
 
-# competition -> soccerdata league key (for the schedule-page glob)
-_LEAGUE_KEYS = {
-    "Premier League": "ENG-Premier League",
-    "Championship": "ENG-Championship",
-}
+# competition -> soccerdata league key (for the schedule-page glob).
+#
+# Read from LEAGUE_IDS rather than restated, for the reason coverage.py records:
+# a second copy drifts and then reports fiction. It did exactly that — when
+# League One / Two entered the player scope this map still held the top two, so
+# `league_key` came back None, the schedule scan was skipped, and the check
+# passed having read nothing.
+_LEAGUE_KEYS = LEAGUE_IDS
 
 
 if __name__ == "__main__":

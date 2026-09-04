@@ -77,6 +77,26 @@ def resolve_fdcouk_team(
         None,
     )
     if clash is not None:
+        # ADOPTABLE: same club, no football-data.co.uk identity yet. The cup and
+        # European paths auto-create clubs with an fbref_id and no fdcouk_name
+        # (ADR 0007), so a club first met in the FA Cup looks "new" here the day
+        # fd.co.uk serves it. `canonical_name` is unique, so an exact match IS
+        # the same club by the schema's own definition.
+        #
+        # Told apart from a respelling because the two need OPPOSITE remedies,
+        # and the generic one is a dead end here: the names are identical, so an
+        # alias maps the name to itself while the lookup stays on fdcouk_name and
+        # still misses. Boreham Wood proved it in August 2026 — an alias changed
+        # nothing; only setting fdcouk_name resolved it.
+        if clash.canonical_name == name and clash.fdcouk_name is None:
+            raise UnknownFdcoukTeamError(
+                f"football-data.co.uk name {name!r} is already held as "
+                f"{clash.canonical_name!r} (id={clash.id}), which has no "
+                f"fdcouk_name — it was auto-created by the cup/European path, "
+                f"which only stamps fbref_id. An alias will NOT fix this: the "
+                f"names are identical, so it would map {name!r} to itself. Set "
+                f"fdcouk_name={name!r} on team id={clash.id} to adopt the row."
+            )
         raise UnknownFdcoukTeamError(
             f"football-data.co.uk name {name!r} is new, but {clash.canonical_name!r} "
             f"(id={clash.id}) already shares the token {token!r} — the signature of "
