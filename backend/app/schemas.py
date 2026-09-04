@@ -42,10 +42,15 @@ class Summary(BaseModel):
     window: str
     games: int
     total: float | None
-    average: float | None
+    average: float | None = None  # teams only (a player's is per_appearance)
     per_appearance: float | None = None  # players only
     per_90: float | None = None  # players only
     minutes_total: int | None = None  # players only
+    # The Recorded Appearance counts the aggregates actually divided by, so the
+    # figures above are checkable against them by hand (ADR 0016). `games` and
+    # `minutes_total` remain metric-independent window facts.
+    recorded_games: int
+    recorded_minutes: int | None = None  # players only
     hit_rate: HitRate | None
     breakdown: list[BreakdownRow]
 
