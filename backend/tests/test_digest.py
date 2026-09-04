@@ -11,7 +11,7 @@ So the digest collapses identical failures and reports them once, on demand.
 
 import datetime as dt
 
-from ingestion.digest import Run, parse_runs, summarise
+from ingestion.digest import NO_EXIT_LINE, Run, build, parse_runs, summarise
 
 NOW = dt.datetime(2026, 8, 27, 20, 0)
 
@@ -98,6 +98,60 @@ def test_traceback_scaffolding_is_dropped_but_the_exception_survives():
     assert "RuntimeError: football-data.co.uk returned nothing" in out
     assert "sqlalche.me" not in out
     assert "most recent call last" not in out
+
+
+KILLED_SAMPLE = (
+    "[01/09/2026 19:30:02.06] ingestion.upcoming start \n"
+    "  Premier League: 59 events -> {'created': 0}\n"
+    "  espn team rows -> {'written': 0, 'skipped_fdcouk': 0, 'no_stats': 0}\n"
+    "[02/09/2026  7:30:01.11] ingestion.upcoming start \n"
+    "  Premier League: 59 events -> {'created': 0}\n"
+    "[02/09/2026  7:30:09.40] exit code 0 \n"
+)
+
+
+def test_a_run_that_never_wrote_an_exit_line_is_a_failure_not_a_gap():
+    """The digest's own blind spot. A job killed mid-flight (machine slept, task
+    timed out, Ctrl-C) writes no exit line, and the next `start` used to reset
+    the parser over the top of it — so it counted as neither a failure nor a run
+    checked. Six had gone that way in the real logs, three of them inside a run
+    of days the digest was reporting as clean."""
+    runs = parse_runs("upcoming", KILLED_SAMPLE)
+    assert [r.exit_code for r in runs] == [NO_EXIT_LINE, 0]
+    assert runs[0].started == dt.datetime(2026, 9, 1, 19, 30, 2)
+
+
+def test_a_killed_run_is_named_rather_than_left_to_read_the_log():
+    """Its body is ordinary healthy output — it died before it could complain —
+    so no line matches the cause filter and the generic fallback would say
+    nothing about what actually happened."""
+    out = summarise(
+        parse_runs("upcoming", KILLED_SAMPLE), since=dt.datetime(2026, 9, 1)
+    )
+    assert "1 failed of 2 run(s)" in out
+    assert "no exit code" in out
+    assert "no error line matched" not in out
+
+
+def test_the_trailing_run_may_still_be_in_flight_so_is_not_blamed():
+    """Only a start followed by ANOTHER start proves the earlier run is over.
+    The last entry in the file has no such proof, so it stays omitted."""
+    text = (
+        "[04/09/2026  8:00:00.10] ingestion.matchday start \n"
+        "[watchdog] start attempt 1/25 (12 pending) -> backfill.log\n"
+    )
+    assert parse_runs("matchday", text) == []
+
+
+def test_build_reads_every_job_log_and_headers_the_window(tmp_path, monkeypatch):
+    """The module's actual entry point, which nothing else covers."""
+    monkeypatch.setattr("ingestion.digest.LOG_DIR", tmp_path)
+    (tmp_path / "upcoming.log").write_text(SAMPLE, encoding="utf-8")
+    report = build(24, now=dt.datetime(2026, 8, 27, 12, 0))
+    assert "BetStats job digest" in report
+    assert "last 24h" in report
+    assert "upcoming: 2 failed" in report
+    assert "unresolved opponent" in report
 
 
 def test_routine_counter_lines_never_outrank_the_real_cause():
