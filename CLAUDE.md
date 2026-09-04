@@ -47,9 +47,16 @@ Personal, single-user web app for **betting research**. Ingests free football da
   is NOT an option (soccerdata 1.9.0 removed it).
 - One match page = both squads, all players.
 - **Payload varies per match.** Some pages return rows with `Min`/`Gls`/cards but
-  NULL `Sh`/`SoT`/`TklW`/`Fls` — e.g. 34 FA Cup fixtures (R3 weekends, Jan 2024 +
-  Jan 2025, including Arsenal–Man United), so it is a per-page quirk, NOT a
-  lower-league or condensed-format effect. Expect NULLs; never assume uniformity.
+  NULL `Sh`/`SoT`/`TklW`/`Fls`. It is a per-PAGE property, all-or-nothing: those
+  five columns are always NULL together, and of 10,617 fixtures 9,253 are fully
+  populated, 1,364 fully NULL, **none mixed**. So a NULL means the source did not
+  publish the column — never that the player registered zero. NOT a lower-league
+  or condensed-format effect: **95.6% is minor-confederation internationals**
+  (WC Qualifiers 890, AFCON Qualifying 374, Asian Cup Qualifying 40), the
+  sparsity ADR 0011 accepts by design; the 34 FA Cup fixtures (R3 weekends, Jan
+  2024 + Jan 2025, including Arsenal–Man United) are 2.5% of it. Expect NULLs;
+  never assume uniformity. Query-side consequence: every aggregate divides by
+  **Recorded Appearances**, see `docs/adr/0016`.
 
 **Cross-source reconciliation:** team/player names differ between FBref, football-data.co.uk, ESPN, and FotMob ("Man Utd" vs "Manchester United"). Resolve source names → canonical `id` via the `fbref_id` / `fdcouk_name` / `espn_id` / `fotmob_id` columns in the ingestion step. Never join on raw display strings.
 

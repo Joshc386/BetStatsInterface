@@ -36,8 +36,14 @@ A **Metric** summarised over a **Rolling Window**. Computed at query time, never
 - _aggregate_ — for players: total, per **Appearance**, and per-90 (minutes-normalised); for teams: total and per-game. No threshold.
 - _hit-rate_ — count of games whose Metric value clears a **Threshold**, expressed as "x of N (%)".
 
+Every mode divides by **Recorded Appearances**, never by all Appearances: *a sparse row shrinks the sample rather than scoring zero.* So the denominator is **metric-dependent** — the same window gives shots a smaller sample than goals if some of its pages omitted the shot columns — and it is always published beside the figure it produced, the way hit-rate has always shown its own "of N". A window therefore reports two counts that are both true and need not match: the **Appearances** in it, and the Recorded Appearances the number was actually computed over (`docs/adr/0016`).
+
 **Appearance**:
 A single game in which a player played > 0 minutes — i.e. a game with a `player_match` row (FBref records no row for a player who did not feature). The player **Rolling Window** counts appearances, not team fixtures: "last 5 games" means his last 5 appearances. `minutes` is displayed per game and as a window total; the minutes value distinguishes a start from a cameo (no separate start flag is stored).
+
+**Recorded Appearance**:
+An **Appearance** in a match whose source page actually published the **Metric** being asked about. Unlike an Appearance, it is **metric-dependent**: the same Appearance is Recorded for goals, cards and minutes but *not* for shots when the page omitted that column. A NULL Metric on a `player_match` row means **the source did not publish it**, never that the player registered zero — the columns are absent per *page*, all-or-nothing, so no fixture is ever partly recorded (verified across 319,006 rows: `shots`/`sot`/`tackles`/`fouls_drawn`/`fouls_committed` are always NULL together, and of 10,617 fixtures 9,253 are fully populated, 1,364 fully NULL, **none mixed**). 1,364 fixtures are affected, **95.6% of them minor-confederation international qualifiers** — the sparsity `docs/adr/0011` accepts by design. Only the aggregate denominators care: a **Summary Metric** divides by Recorded Appearances, never by all Appearances, because counting an unpublished game as zero fabricates a value the source never gave. See `docs/adr/0016`.
+_Avoid_: "covered" (already means in-scope for ingestion — a **Covered tie**, a **Covered international competition**); treating a NULL Metric as a zero.
 
 **Threshold**:
 The user-chosen value a **Metric** is tested against, per game, in a Summary Metric's hit-rate mode (e.g. "2+ shots on target"). Tested at the per-game level, never against an average. Adjustable in the UI per lookup, so the resulting per-game boolean is computed at query time and never stored.
