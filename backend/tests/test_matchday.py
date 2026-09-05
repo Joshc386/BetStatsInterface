@@ -7,7 +7,10 @@ competitions to refresh, in what order, is pure — that's what these lock down.
 import datetime as dt
 
 import pytest
+from sqlalchemy import select
 
+from app.db import SessionLocal
+from app.models.reference import Competition
 from ingestion import coverage, matchday
 from ingestion.matchday import (
     ALL_PLAYER_COMPETITIONS,
@@ -227,3 +230,68 @@ def test_a_genuinely_quiet_day_reports_nothing_overdue(monkeypatch):
     report = matchday.run_matchday(season="2627", log=lambda *a, **k: None)
     assert report["ran"] == []
     assert report["overdue"] == []
+
+
+# --- promotion play-offs (ADR 0017) -----------------------------------------
+
+
+def test_pending_counts_the_playoff_sibling_alongside_its_league():
+    """The trigger has to agree with the ingester. `backfill_season` has spanned
+    the league AND its play-off competition since ADR 0004, but `_pending` — the
+    probe that decides whether it ever runs — counted the league alone, so a
+    play-off round that landed after the final league game was invisible."""
+    with SessionLocal() as session:
+        ids = matchday.run_backfill._competition_ids(session, "Championship")
+        names = set(
+            session.scalars(
+                select(Competition.name).where(Competition.id.in_(ids))
+            )
+        )
+    assert names == {"Championship", "Championship Play-offs"}
+
+
+def test_pending_is_unchanged_for_a_league_with_no_playoffs():
+    """The Premier League is the case that proves the lookup is data-driven:
+    no seeded sibling, no second competition, no behaviour change."""
+    with SessionLocal() as session:
+        ids = matchday.run_backfill._competition_ids(session, "Premier League")
+    assert len(ids) == 1
+
+
+def test_pending_is_unchanged_for_a_cup():
+    """No cup has a '<name> Play-offs' sibling, so the cup probe is untouched."""
+    with SessionLocal() as session:
+        ids = matchday.run_backfill._competition_ids(session, "FA Cup")
+    assert len(ids) == 1
+
+
+def test_a_league_run_builds_its_playoff_team_rows(monkeypatch):
+    """Play-off team rows were the third gap: matchday built them only for
+    CUP_PLAYER_COMPETITIONS, so the Championship Play-offs rows that exist were
+    put there by a hand-run `cups team` (ADR 0004 deferred them; ADR 0008's
+    follow-up did them manually)."""
+    _isolate(monkeypatch, {"Championship": 3})
+    built: list[str] = []
+    monkeypatch.setattr(
+        matchday.cups,
+        "backfill_cup_team_match",
+        lambda season, cup_name, log=print: built.append(cup_name),
+    )
+
+    matchday.run_matchday(season="2627", log=lambda *a, **k: None)
+
+    assert built == ["Championship Play-offs"]
+
+
+def test_a_league_with_no_playoff_competition_builds_nothing(monkeypatch):
+    _isolate(monkeypatch, {"Premier League": 3})
+    built: list[str] = []
+    monkeypatch.setattr(
+        matchday.cups,
+        "backfill_cup_team_match",
+        lambda season, cup_name, log=print: built.append(cup_name),
+    )
+
+    matchday.run_matchday(season="2627", log=lambda *a, **k: None)
+
+    assert built == []

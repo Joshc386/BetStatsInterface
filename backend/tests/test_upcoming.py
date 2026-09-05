@@ -18,6 +18,8 @@ from app.models.reference import Competition, Team
 from ingestion.upcoming import (
     ESPN_LEAGUES,
     FINISHED_STATUSES,
+    PLAYOFF_SEASON_SLUGS,
+    league_event_destination,
     UnknownEspnTeamError,
     parse_scoreboard,
     purge_stale_international_placeholders,
@@ -582,3 +584,97 @@ def test_last_nights_match_is_not_yet_stalled():
     """The same run that sees it finished marks it — no alarm on the way past."""
     last_night = NOW_STALL - dt.timedelta(hours=12)
     assert stalled([("1", "2", last_night)], set(), now=NOW_STALL) == []
+
+
+# --- promotion play-offs (ADR 0017) -----------------------------------------
+
+
+def _league_event(
+    slug: str | None,
+    *,
+    home: tuple[str, str, str] = ("6", "Hull City", "Hull City"),
+    away: tuple[str, str, str] = ("398", "Millwall", "Millwall"),
+    date: str = "2026-05-08T19:00Z",
+    status: str = "STATUS_FULL_TIME",
+) -> dict:
+    """A league scoreboard event carrying ESPN's season slug (None = omitted)."""
+
+    def side(t, home_away):
+        return {"homeAway": home_away,
+                "team": {"id": t[0], "displayName": t[1], "shortDisplayName": t[2]}}
+
+    event = {
+        "id": "747474",
+        "date": date,
+        "status": {"type": {"name": status}},
+        "competitions": [{"competitors": [side(home, "home"), side(away, "away")],
+                          "status": {"type": {"name": status}}}],
+    }
+    if slug is not None:
+        event["season"] = {"year": 2025, "type": 13530, "slug": slug}
+    return event
+
+
+def test_parse_scoreboard_carries_the_season_slug():
+    """The phase of a league event is a structured field, not display text —
+    it is what tells a promotion play-off from a regular-season game."""
+    events = parse_scoreboard(
+        {"events": [_league_event("promotion-semifinals")]}, include_finished=True
+    )
+    assert [e.season_slug for e in events] == ["promotion-semifinals"]
+
+
+def test_parse_scoreboard_tolerates_an_event_with_no_season_block():
+    """Absence of the block is absence of phase information, not an unknown
+    phase — it must parse, and it means 'league' downstream."""
+    events = parse_scoreboard(
+        {"events": [_league_event(None)]}, include_finished=True
+    )
+    assert events[0].season_slug is None
+
+
+def test_promotion_slugs_route_to_the_playoff_competition():
+    """Both legs of the semi-finals and the final, in all three divisions that
+    have them — verified against the real 2025-26 payloads."""
+    for slug in ("promotion-semifinals", "promotion-final"):
+        assert league_event_destination(slug, has_playoffs=True) == "playoff"
+
+
+def test_the_regular_season_still_routes_to_the_league():
+    assert league_event_destination("regular-season", has_playoffs=True) == "league"
+
+
+def test_a_division_with_no_playoff_competition_keeps_every_event():
+    """The gate, not the vocabulary, is what keeps the Premier League safe. Its
+    slug is season-scoped ('2025-26-english-premier-league') and changes every
+    year, so a rule phrased as 'anything but regular-season' would have routed
+    all 380 of its fixtures into a play-off competition."""
+    assert league_event_destination(
+        "2025-26-english-premier-league", has_playoffs=False
+    ) == "league"
+    assert league_event_destination("promotion-final", has_playoffs=False) == "league"
+
+
+def test_an_unrecognised_slug_is_reported_never_guessed():
+    """The tripwire for ESPN renaming a slug — otherwise exactly how this
+    trigger would be lost again unnoticed. Routing it to the league risks a
+    mis-scoped club_league row; routing it to the play-offs invents a tie."""
+    assert league_event_destination("relegation-playoffs", has_playoffs=True) == "unknown"
+
+
+def test_a_missing_slug_falls_back_to_the_league_rather_than_alarming():
+    """Distinct from an unrecognised slug, deliberately. A missing season block
+    is a payload-shape change carrying no phase claim at all, so the safe answer
+    is the behaviour that predates this routing. Treating it as unknown would
+    skip every event in the division and lose the whole slate — the blast radius
+    ADR 0017 rejected raising for."""
+    assert league_event_destination(None, has_playoffs=True) == "league"
+
+
+def test_the_playoff_slugs_are_a_positive_match_not_a_negation():
+    """Guards the shape of the rule itself, which is the part the evidence
+    forced: three vocabularies exist across leagues and cups, so only an
+    explicit set can be safe."""
+    assert PLAYOFF_SEASON_SLUGS == frozenset(
+        {"promotion-semifinals", "promotion-final"}
+    )

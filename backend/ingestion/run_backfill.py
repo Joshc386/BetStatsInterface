@@ -59,6 +59,26 @@ def _set_sleep_blocked(blocked: bool) -> None:
         pass
 
 
+def _competition_ids(session, competition_name: str) -> list[int]:
+    """This competition, plus its ``"<name> Play-offs"`` sibling if one is seeded.
+
+    Mirrors the ``comp_ids`` ``players.backfill_season`` has built since ADR
+    0004. The trigger has to span what the ingester spans: counting the league
+    alone made a play-off round invisible to the probe that decides whether the
+    ingester runs, so in a live season the play-offs were never fetched at all
+    (ADR 0017). Cups and the Premier League have no sibling — one id, unchanged.
+    """
+    comp = session.scalar(
+        select(Competition).where(Competition.name == competition_name)
+    )
+    playoff = session.scalar(
+        select(Competition).where(
+            Competition.name == f"{competition_name} Play-offs"
+        )
+    )
+    return [c.id for c in (comp, playoff) if c is not None]
+
+
 def _pending(season: str, competition_name: str = "Premier League") -> int:
     """Finished fixtures for this competition-season with no player_match rows.
 
@@ -66,14 +86,14 @@ def _pending(season: str, competition_name: str = "Premier League") -> int:
     linking happens inside backfill_season, so a fresh season has 0 linked
     fixtures up front. Counting by "finished and missing player data" lets the
     watchdog trigger the first run; backfill_season links + ingests from there.
+
+    Spans the play-off sibling too — see ``_competition_ids``.
     """
     with SessionLocal() as session:
-        comp = session.scalar(
-            select(Competition).where(Competition.name == competition_name)
-        )
+        comp_ids = _competition_ids(session, competition_name)
         rows = session.execute(
             select(Fixture.id).where(
-                Fixture.competition_id == comp.id,
+                Fixture.competition_id.in_(comp_ids),
                 Fixture.season == season,
                 Fixture.status == "finished",
             )

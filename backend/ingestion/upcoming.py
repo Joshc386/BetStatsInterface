@@ -97,6 +97,50 @@ def takes_finished(competition_type: str) -> bool:
     """
     return competition_type != "international"
 
+
+# ESPN's `season.slug` for the EFL promotion play-offs — the structured field
+# that tells a play-off leg from a regular-season game (ADR 0017). Verified
+# against the real 2025-26 payloads: eng.2, eng.3 and eng.4 each return exactly
+# 4 semi-final legs + 1 final under these two.
+#
+# A POSITIVE match, never a negation of "regular-season", and that shape is what
+# the evidence forced. The slug vocabulary is not shared between competitions:
+# the Premier League's is season-scoped ('2025-26-english-premier-league', a new
+# string every year) and the cups have a third set again ('first-round',
+# 'quarterfinals', ...). "Anything but regular-season" would have routed all 380
+# Premier League fixtures into a play-off competition.
+PLAYOFF_SEASON_SLUGS = frozenset({"promotion-semifinals", "promotion-final"})
+REGULAR_SEASON_SLUG = "regular-season"
+
+
+def league_event_destination(season_slug: str | None, *, has_playoffs: bool) -> str:
+    """Where a league scoreboard event belongs: 'league' | 'playoff' | 'unknown'.
+
+    Pure, so the rule is testable without a payload or a DB.
+
+    ``has_playoffs`` is the gate, and it is the gate rather than the vocabulary
+    that keeps the Premier League safe: a division only routes play-offs when a
+    ``"<league> Play-offs"`` competition is actually seeded, which is the same
+    test ``players.backfill_season`` applies before passing one to
+    ``link_fixtures``. Seeding that competition is what turns the routing on.
+
+    An unrecognised slug is 'unknown' — skipped and reported, never guessed.
+    Sending it to the league would risk a mis-scoped `club_league` row (the
+    scope-tagging non-negotiable); sending it to the play-offs would invent a
+    tie that becomes pending player work FBref can never satisfy.
+
+    A MISSING slug is different in kind and falls back to 'league': absence of
+    the season block is a payload-shape change carrying no phase claim at all,
+    so the safe answer is the behaviour that predates this routing. Treating it
+    as unknown would skip every event in the division and lose the whole slate.
+    """
+    if not has_playoffs or season_slug is None or season_slug == REGULAR_SEASON_SLUG:
+        return "league"
+    if season_slug in PLAYOFF_SEASON_SLUGS:
+        return "playoff"
+    return "unknown"
+
+
 # European competitions are DETECTED but never written (ADR 0012). Deliberately
 # separate from ESPN_LEAGUES: ESPN serves every tie including the
 # foreign-vs-foreign ones a Covered tie excludes, and European fixtures are keyed
@@ -163,6 +207,11 @@ class ScheduledEvent:
     # it (docs/adr/0015) rather than a later job re-fetching a scoreboard to
     # rediscover an identity we already have.
     espn_event_id: str | None = None
+    # ESPN's phase for this event ('regular-season', 'promotion-final', ...).
+    # None when the payload carries no season block. Read by
+    # `league_event_destination` (ADR 0017); meaningless for cups, which route
+    # on covered-tie membership instead.
+    season_slug: str | None = None
 
 
 def espn_json(url: str, *, timeout: int = 30) -> dict:
@@ -305,6 +354,7 @@ def parse_scoreboard(
                 away_names=(away["displayName"], away["shortDisplayName"]),
                 finished=finished,
                 espn_event_id=str(event["id"]) if event.get("id") else None,
+                season_slug=(event.get("season") or {}).get("slug"),
             )
         )
     return out
@@ -545,12 +595,19 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     covered club. Reporting does not roll the slate back: the cups run last, and
     losing a whole cup slate over one non-league spelling would take the fixture
     view down with it. The run still ends non-zero, so the alias work alarms.
+
+    League events also ROUTE by phase (ADR 0017): ESPN's `season.slug` sends a
+    promotion play-off to the ``"<league> Play-offs"`` competition, which is what
+    makes a live-season play-off round visible to matchday's pending probe at
+    all. An unrecognised slug is skipped and reported on the same
+    report-don't-roll-back terms as an unresolved cup name.
     """
     today = dt.date.today()
     now = dt.datetime.now(tz=dt.timezone.utc)
     season = season_for(now)
     report: dict[str, dict] = {}
     unresolved_cups: dict[str, list[str]] = {}
+    unknown_slugs: dict[str, set[str]] = {}
     stalled_all: dict[str, list[str]] = {}
     for comp_name, slug in ESPN_LEAGUES.items():
         with SessionLocal() as session:
@@ -582,7 +639,22 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                         )
                     ] += 1
             else:
+                # The play-off competition, when this division has one seeded
+                # (ADR 0017). Resolved once per league, not per event.
+                playoff = session.scalar(
+                    select(Competition).where(
+                        Competition.name == f"{comp_name} Play-offs"
+                    )
+                )
                 for ev in events:
+                    destination = league_event_destination(
+                        ev.season_slug, has_playoffs=playoff is not None
+                    )
+                    if destination == "unknown":
+                        unknown_slugs.setdefault(comp_name, set()).add(
+                            str(ev.season_slug)
+                        )
+                        continue
                     try:
                         home = resolve_espn_team(session, ev.home_espn_id, ev.home_names)
                         away = resolve_espn_team(session, ev.away_espn_id, ev.away_names)
@@ -591,7 +663,9 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                         continue
                     counts[
                         upsert_event(
-                            session, competition, home.id, away.id, ev.date,
+                            session,
+                            playoff if destination == "playoff" else competition,
+                            home.id, away.id, ev.date,
                             finished=ev.finished,
                             espn_event_id=ev.espn_event_id,
                         )
@@ -628,10 +702,22 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
                     )
                     for line in late:
                         log(f"    {line}")
+            if comp_name in unknown_slugs:
+                log(
+                    f"  {comp_name}: skipped event(s) with an unrecognised ESPN "
+                    f"season slug - neither league nor play-off, so nothing was "
+                    f"written (docs/adr/0017):"
+                )
+                for line in sorted(unknown_slugs[comp_name]):
+                    log(f"    {line}")
             report[comp_name] = {"events": len(events), **counts}
             log(f"  {comp_name}: {len(events)} events -> {counts}")
     if unresolved_cups:
         report["_unresolved_cups"] = unresolved_cups
+    if unknown_slugs:
+        report["_unknown_slugs"] = {
+            comp: sorted(slugs) for comp, slugs in unknown_slugs.items()
+        }
     if stalled_all:
         report["_stalled"] = stalled_all
     return report
@@ -749,4 +835,10 @@ if __name__ == "__main__":
     # Leftover alias work, or a slate that has stopped marking played matches
     # finished — the latter silently stalls FBref ingestion downstream, so it
     # must alarm here rather than be discovered weeks later (ADR 0014).
-    sys.exit(1 if result.get("_unresolved_cups") or result.get("_stalled") else 0)
+    sys.exit(
+        1
+        if result.get("_unresolved_cups")
+        or result.get("_stalled")
+        or result.get("_unknown_slugs")
+        else 0
+    )
