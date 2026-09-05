@@ -35,8 +35,11 @@ import datetime as dt
 import subprocess
 import sys
 
+from sqlalchemy import select
+
 from ingestion import coverage, cups, players, run_backfill, upcoming
 from app.db import SessionLocal
+from app.models.reference import Competition
 from ingestion.upcoming import season_for
 
 # Player competitions by ingestion path (see ingestion.run_backfill routing).
@@ -81,6 +84,25 @@ def plan_competitions(
             f"choose from {ALL_PLAYER_COMPETITIONS}"
         )
     return list(requested)
+
+
+def _team_row_competitions(competition_name: str) -> list[str]:
+    """Competitions whose team_match rows this run should build from cache.
+
+    A cup builds its own. A league builds none — football-data.co.uk owns league
+    team data (ADR 0001) — but DOES build its play-offs', which fd.co.uk has
+    never covered: ADR 0004 deferred them and they have been produced by a
+    hand-run `cups team` ever since. Nothing to build is the common case and
+    costs one DB read.
+    """
+    if competition_name in CUP_PLAYER_COMPETITIONS:
+        return [competition_name]
+    playoff_name = f"{competition_name} Play-offs"
+    with SessionLocal() as session:
+        exists = session.scalar(
+            select(Competition.id).where(Competition.name == playoff_name)
+        )
+    return [playoff_name] if exists else []
 
 
 def _sweep_orphans(log=print) -> None:
@@ -208,10 +230,13 @@ def run_matchday(
         log(f"[matchday] --- {comp} {season} ---")
         code = run_backfill.run(season, comp)
         results[comp] = code
-        if comp in CUP_PLAYER_COMPETITIONS:
-            # Player rows just landed in cache; build the two team rows/fixture.
-            log(f"[matchday] building {comp} team_match rows (zero network)")
-            cups.backfill_cup_team_match(season, cup_name=comp, log=log)
+        # Player rows just landed in cache; build the two team rows/fixture.
+        # A league run also covers its play-offs — backfill_season spans both
+        # competitions (ADR 0004) — so their team rows are built here too rather
+        # than by the hand-run `cups team` pass they used to need (ADR 0017).
+        for team_row_comp in _team_row_competitions(comp):
+            log(f"[matchday] building {team_row_comp} team_match rows (zero network)")
+            cups.backfill_cup_team_match(season, cup_name=team_row_comp, log=log)
         _sweep_orphans(log)
 
     log(f"[matchday] done — {results}")

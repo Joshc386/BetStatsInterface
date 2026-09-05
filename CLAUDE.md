@@ -147,6 +147,9 @@ python -m venv .venv
 
 # cup team_match (ADR 0008 follow-up — zero-network, idempotent; run AFTER the cup player backfill)
 .venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + team_stats_extra corners + player-row sums; also accepts "Championship Play-offs"
+# PLAY-OFF team rows no longer need this by hand: since ADR 0017 matchday runs
+# the same pass for "<league> Play-offs" after a league run. Still the way to
+# rebuild an OLD play-off season.
 
 # upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; idempotent)
 .venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
@@ -163,6 +166,17 @@ python -m venv .venv
 # withdrew it from FBref's player pipeline too (cost 6 PL + 11 Champ fixtures,
 # Aug 2026). Internationals stay scheduled-only ON PURPOSE: their placeholders
 # are purged by status='scheduled', so marking one finished strands it forever.
+# ADR 0017: ALSO ROUTES THE PROMOTION PLAY-OFFS. A league event is routed by
+# ESPN's `season.slug`: `promotion-semifinals`/`promotion-final` -> the
+# "<league> Play-offs" competition, everything else -> the league. This is what
+# gives a live season's play-offs a trigger at all: nothing else creates those
+# fixtures until a retrospective backfill months later, so matchday could not
+# see them and coverage had no row to audit. POSITIVE match, never "anything
+# but regular-season" -- the PL's slug is season-scoped
+# ("2026-27-english-premier-league", new string every year), so a negation would
+# route all 380 of its fixtures into a play-off comp. Gated on the play-off
+# competition being SEEDED, so the PL never enters the branch. An unrecognised
+# slug is skipped, logged and exits 1 -- never guessed into either competition.
 # Also runs the STALLED backstop: a fixture long past kick-off that nothing
 # marked finished, and that ESPN did not report postponed -> exit 1.
 # AUTOMATED: Windows Task Scheduler task "BetStats upcoming fixtures" runs
