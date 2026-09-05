@@ -148,10 +148,14 @@ def entity_summary(
 
     if kind == "bool":
         total: float | None = sum(1 for v in values if v)
-        average = (total / len(values)) if values else None
     else:
         total = sum(values) if values else 0
-        average = (total / len(values)) if values else None
+
+    # Team vocabulary only. For a player the same figure is `per_appearance`,
+    # which is what CONTEXT.md calls it (ADR 0016).
+    average = (
+        (total / len(values)) if values and entity == "team" else None
+    )
 
     hit_rate = None
     if threshold is not None and values:
@@ -170,11 +174,14 @@ def entity_summary(
             "pct": round(100 * hits / len(values), 1),
         }
 
-    per_appearance = per_90 = minutes_total = None
+    per_appearance = per_90 = minutes_total = recorded_minutes = None
     if entity == "player":
         minutes_total = sum(r.minutes for r in rows if r.minutes is not None)
-        per_appearance = (total / games) if games else None
-        per_90 = (total / minutes_total * 90) if minutes_total else None
+        # Minutes played in a match whose page never published this Metric are
+        # not minutes over which it can be counted (ADR 0016).
+        recorded_minutes = sum(r.minutes for r in rows if r.value is not None)
+        per_appearance = (total / len(values)) if values else None
+        per_90 = (total / recorded_minutes * 90) if recorded_minutes else None
 
     name = session.scalar(select(name_model.canonical_name).where(name_model.id == entity_id))
 
@@ -186,11 +193,17 @@ def entity_summary(
         "scope": comp_label,
         "window": window,
         "games": games,
+        # What the aggregates actually divided by. `games` and `minutes_total`
+        # stay window facts (metric-independent, so "Minutes" does not move when
+        # you switch metric); these carry the Recorded Appearance counts, so the
+        # arithmetic on screen is checkable by hand. ADR 0016.
+        "recorded_games": len(values),
         "total": total,
         "average": average,
         "per_appearance": per_appearance,
         "per_90": per_90,
         "minutes_total": minutes_total,
+        "recorded_minutes": recorded_minutes,
         "hit_rate": hit_rate,
         "breakdown": [
             {

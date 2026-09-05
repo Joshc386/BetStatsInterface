@@ -7,7 +7,7 @@ import { LastNInput } from '../components/LastNInput'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 import {
-  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl,
+  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
 } from '../components/controls'
 
 const label = (m: string) =>
@@ -405,8 +405,11 @@ function SummaryBody({
             <Stat
               label={isPlayer ? 'Per appearance' : 'Average'}
               value={fmt(isPlayer ? s.per_appearance : s.average)}
+              note={sampleNote(s.recorded_games, s.games, 'games')}
             />
-            {isPlayer && <Stat label="Per 90" value={fmt(s.per_90)} />}
+            {isPlayer && (
+              <Stat label="Per 90" value={fmt(s.per_90)} note={sampleNote(s.recorded_minutes, s.minutes_total, 'mins')} />
+            )}
             {isPlayer && (
               <Stat label="Minutes" value={fmt(s.minutes_total, 0)} />
             )}

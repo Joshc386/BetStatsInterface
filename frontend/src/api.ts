@@ -58,10 +58,15 @@ export interface Summary {
   window: string
   games: number
   total: number | null
-  average: number | null
+  average: number | null // teams only (a player's is per_appearance)
   per_appearance: number | null
   per_90: number | null
   minutes_total: number | null
+  // Recorded Appearances — what the aggregates above actually divided by, which
+  // is fewer than `games`/`minutes_total` wherever the source did not publish
+  // the metric for a match (docs/adr/0016).
+  recorded_games: number
+  recorded_minutes: number | null
   hit_rate: HitRate | null
   breakdown: BreakdownRow[]
 }

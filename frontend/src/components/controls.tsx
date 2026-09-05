@@ -71,13 +71,44 @@ export function Toggle({
   )
 }
 
+/** The `note` for a rate tile: what the rate was actually divided by, stated
+ * only when that is smaller than the window.
+ *
+ * Silent in the common case — most windows have every game recorded, and a note
+ * on every tile would be noise that stops being read. It appears exactly when
+ * the denominator is not the one the window implies, which is the case a reader
+ * would otherwise have no way to spot (docs/adr/0016). */
+export function sampleNote(
+  recorded: number | null,
+  whole: number | null,
+  unit: string,
+): string | undefined {
+  if (recorded == null || whole == null || recorded >= whole) return undefined
+  return `over ${recorded.toLocaleString()} of ${whole.toLocaleString()} ${unit}`
+}
+
 /** A headline figure. Solid surface + larger numeral so it outranks the
- * toolbar above it. */
-export function Stat({ label, value }: { label: string; value: string }) {
+ * toolbar above it.
+ *
+ * `note` states the sample a rate was computed over when that is smaller than
+ * the window — the source did not publish the metric for every game, so the
+ * denominator is not the one the window implies (docs/adr/0016). Shown for the
+ * same reason hit-rate shows its own "of N": a rate whose denominator is
+ * invisible cannot be checked. */
+export function Stat({
+  label,
+  value,
+  note,
+}: {
+  label: string
+  value: string
+  note?: string
+}) {
   return (
     <div className="min-w-28 rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
       <div className="text-xs text-slate-500">{label}</div>
       <div className="text-2xl font-semibold tabular-nums text-slate-100">{value}</div>
+      {note && <div className="mt-0.5 text-[11px] text-amber-500/80">{note}</div>}
     </div>
   )
 }

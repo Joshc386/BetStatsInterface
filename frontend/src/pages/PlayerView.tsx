@@ -4,7 +4,7 @@ import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { LastNInput } from '../components/LastNInput'
 import {
-  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl,
+  ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
 } from '../components/controls'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
@@ -284,8 +284,16 @@ export default function PlayerView() {
                 {/* the METRIC total over the window (not starts — starts aren't
                     ingested); named after the metric so it can't be misread */}
                 <Stat label={`Total ${label(metric).toLowerCase()}`} value={fmt(summary.total)} />
-                <Stat label="Per app" value={fmt(summary.per_appearance)} />
-                <Stat label="Per 90" value={fmt(summary.per_90)} />
+                <Stat
+                  label="Per app"
+                  value={fmt(summary.per_appearance)}
+                  note={sampleNote(summary.recorded_games, summary.games, 'games')}
+                />
+                <Stat
+                  label="Per 90"
+                  value={fmt(summary.per_90)}
+                  note={sampleNote(summary.recorded_minutes, summary.minutes_total, 'mins')}
+                />
                 <Stat label="Minutes" value={fmt(summary.minutes_total, 0)} />
               </div>
 
