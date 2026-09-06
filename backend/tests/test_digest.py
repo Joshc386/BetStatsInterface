@@ -167,3 +167,78 @@ def test_routine_counter_lines_never_outrank_the_real_cause():
     out = summarise([run], since=NOW - dt.timedelta(days=1))
     assert "skipped_finished" not in out
     assert "unresolved opponent" in out
+
+
+# --- runs whose wrapper was killed but whose work completed -----------------
+#
+# The 19:30 `upcoming` slot was reported as "killed mid-flight" on six nights
+# (26/08 and 01-05/09/2026) while in fact completing every time. Task Scheduler
+# terminated the run_upcoming.cmd instance ~600ms after launch (event 111,
+# rc 0x8007050B) and the python child survived as an orphan, finishing its work
+# ~10s later. Only the wrapper's `echo exit code` was lost — so the digest, which
+# had no other end marker to read, inferred a death that never happened.
+
+KILLED_WRAPPER = """[05/09/2026 19:30:01.96] ingestion.upcoming start 
+  Premier League: 69 events -> {'created': 0}
+  EFL Cup: 74 events -> {'created': 0}
+  espn team rows -> {'written': 0, 'no_stats': 23}
+[05/09/2026 19:30:15.02] exit code 0 (python)
+[05/09/2026 20:00:02.63] ingestion.upcoming start 
+  Premier League: 70 events -> {'created': 0}
+[05/09/2026 20:00:12.01] exit code 0 
+"""
+
+TRULY_KILLED = """[05/09/2026 19:30:01.96] ingestion.upcoming start 
+  Premier League: 69 events -> {'created': 0}
+[05/09/2026 20:00:02.63] ingestion.upcoming start 
+  Premier League: 70 events -> {'created': 0}
+[05/09/2026 20:00:12.01] exit code 0 
+"""
+
+
+def test_a_run_that_marked_its_own_end_is_not_reported_as_killed():
+    """The wrapper's line is gone, but the job recorded its own outcome, so the
+    run is what it actually was: a success."""
+    runs = parse_runs("upcoming", KILLED_WRAPPER)
+    assert [r.exit_code for r in runs] == [0, 0]
+    assert NO_EXIT_LINE not in [r.exit_code for r in runs]
+
+
+def test_a_run_with_no_end_marker_at_all_is_still_a_failure():
+    """Guards against over-fixing. A job that genuinely dies mid-flight writes
+    neither marker, and that must still be caught — it is the whole reason the
+    NO_EXIT_LINE branch exists."""
+    runs = parse_runs("upcoming", TRULY_KILLED)
+    assert runs[0].exit_code == NO_EXIT_LINE
+
+
+def test_a_self_marked_failure_keeps_its_exit_code():
+    """The marker carries the real code, not merely 'it ended'."""
+    text = KILLED_WRAPPER.replace("exit code 0 (python)", "exit code 1 (python)")
+    assert parse_runs("upcoming", text)[0].exit_code == 1
+
+
+def test_the_digest_understands_the_marker_the_job_writes():
+    """The contract between the two modules: `upcoming` writes this line and
+    `digest` has to parse it. Asserting the format in either module alone would
+    let them drift apart silently — which is precisely how the outcome went
+    unrecorded in the first place."""
+    from ingestion.upcoming import run_end_marker
+
+    line = run_end_marker(0, dt.datetime(2026, 9, 5, 19, 30, 15))
+    text = f"[05/09/2026 19:30:01.96] ingestion.upcoming start \n{line}\n"
+    runs = parse_runs("upcoming", text + "[05/09/2026 20:00:02.63] ingestion.upcoming start \n")
+    assert runs[0].exit_code == 0
+
+
+def test_both_markers_present_counts_as_one_run():
+    """The normal case once the job marks its own end: python writes the marker,
+    then the surviving wrapper writes its own. Two lines, ONE run — a duplicate
+    would inflate every 'of N run(s)' figure in the digest."""
+    text = (
+        "[05/09/2026 19:30:01.96] ingestion.upcoming start \n"
+        "  Premier League: 69 events -> {'created': 0}\n"
+        "[05/09/2026 19:30:15.02] exit code 0 (python)\n"
+        "[05/09/2026 19:30:15.10] exit code 0 \n"
+    )
+    assert len(parse_runs("upcoming", text)) == 1

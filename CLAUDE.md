@@ -123,6 +123,15 @@ python -m venv .venv
 # (after squads 09:00, so the whole day is in) -> backend/logs/digest.txt, which
 # is utf-8-SIG so Windows tools render club names and em-dashes correctly.
 # Identical causes are COLLAPSED with a count, so a standing fault is one line.
+# A run's end is marked TWICE: by the job itself (`exit code N (python)`) and by
+# its .cmd wrapper. The digest closes the run on whichever lands first and
+# ignores the other, so it never double-counts. The job's own marker exists
+# because Task Scheduler terminates the WRAPPER while the python child survives
+# and finishes as an orphan -- the 19:30 upcoming slot, six nights across
+# 26/08-05/09/2026, every one a completed run reported as "killed mid-flight".
+# So: no marker at all still means a real death; a missing WRAPPER line no
+# longer does. Only `upcoming` marks itself so far -- the other three wrappers
+# take the same one-liner if they ever show it.
 
 # quality
 .venv/Scripts/python.exe -m pytest                         # tests

@@ -36,11 +36,17 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 #
 # Without it such a run vanished — the next `start` reset the parser, so it
 # counted as neither a failure nor a run checked, and the digest reported
-# "no failures" over the top of it. Six had already gone that way, three of them
-# (upcoming, 19:30 on 01-03/09/2026) inside the run of clean days this was
-# trusted to be reporting on. A job killed mid-flight — machine slept, task
-# timed out, Ctrl-C — is exactly the failure nobody is watching for, so it is
-# the one the digest must not drop.
+# "no failures" over the top of it. A job killed mid-flight — machine slept,
+# task timed out, Ctrl-C — is exactly the failure nobody is watching for, so it
+# is the one the digest must not drop.
+#
+# The 19:30 `upcoming` runs this branch was first demonstrated on turned out
+# NOT to be deaths: Task Scheduler was terminating the .cmd wrapper ~600ms in
+# while the python child completed the work as an orphan, so only the wrapper's
+# `exit code` line was missing. The branch was right and the diagnosis was
+# wrong. Jobs now mark their own end from inside the process that did the work
+# (`upcoming.run_end_marker`), so a missing marker means what this branch has
+# always claimed it means. 28/08 14:30 was a genuine one — a Ctrl-C.
 NO_EXIT_LINE = -1
 
 _KILLED = "run ended with no exit code — killed mid-flight (machine slept? task timed out?)"
