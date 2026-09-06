@@ -123,6 +123,22 @@ python -m venv .venv
 # (after squads 09:00, so the whole day is in) -> backend/logs/digest.txt, which
 # is utf-8-SIG so Windows tools render club names and em-dashes correctly.
 # Identical causes are COLLAPSED with a count, so a standing fault is one line.
+# A run's end is marked TWICE: by the job itself (`exit code N (python)`) and by
+# its .cmd wrapper. The digest closes the run on whichever lands first and
+# ignores the other, so it never double-counts. The job's own marker exists
+# because Task Scheduler terminates the WRAPPER while the python child survives
+# and finishes as an orphan -- the 19:30 upcoming slot, six nights across
+# 26/08-05/09/2026, every one a completed run reported as "killed mid-flight".
+# So: no marker at all still means a real death; a missing WRAPPER line no
+# longer does. ALL FOUR jobs mark themselves; the format lives in
+# digest.run_end_marker, beside the regex that reads it, because a format split
+# across two modules is the drift that caused this. A Ctrl-C still leaves no
+# marker (nightly catches Exception, not BaseException) and still reports.
+# WATCH (set 06/09/2026): StopOnIdleEnd was true on "BetStats upcoming
+# fixtures" and is the leading suspect for the 19:30 terminations; it is now
+# false. If 19:30 stops being terminated, that was it. Task XML backed up
+# before the change. Not proven -- Microsoft documents the setting as applying
+# only when RunOnlyIfIdle is true, which it is not.
 
 # quality
 .venv/Scripts/python.exe -m pytest                         # tests

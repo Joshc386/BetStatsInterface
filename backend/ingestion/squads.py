@@ -381,7 +381,13 @@ def refresh_all(season: str | None = None, log=print) -> dict:
 if __name__ == "__main__":
     import sys
 
+    from ingestion.digest import run_end_marker
+
     result = refresh_all()
     # A club whose roster could not be fetched leaves its Squad stale, which the
     # panel would show without complaint - so the exit code has to say so.
-    sys.exit(1 if result["failed"] else 0)
+    code = 1 if result["failed"] else 0
+    # Recorded from inside the process that did the work, and FLUSHED, so the
+    # outcome survives whatever happens to the wrapper (digest.run_end_marker).
+    print(run_end_marker(code), flush=True)
+    sys.exit(code)

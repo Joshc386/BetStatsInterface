@@ -11,7 +11,14 @@ So the digest collapses identical failures and reports them once, on demand.
 
 import datetime as dt
 
-from ingestion.digest import NO_EXIT_LINE, Run, build, parse_runs, summarise
+from ingestion.digest import (
+    NO_EXIT_LINE,
+    Run,
+    build,
+    parse_runs,
+    run_end_marker,
+    summarise,
+)
 
 NOW = dt.datetime(2026, 8, 27, 20, 0)
 
@@ -167,3 +174,93 @@ def test_routine_counter_lines_never_outrank_the_real_cause():
     out = summarise([run], since=NOW - dt.timedelta(days=1))
     assert "skipped_finished" not in out
     assert "unresolved opponent" in out
+
+
+# --- runs whose wrapper was killed but whose work completed -----------------
+#
+# The 19:30 `upcoming` slot was reported as "killed mid-flight" on six nights
+# (26/08 and 01-05/09/2026) while in fact completing every time. Task Scheduler
+# terminated the run_upcoming.cmd instance ~600ms after launch (event 111,
+# rc 0x8007050B) and the python child survived as an orphan, finishing its work
+# ~10s later. Only the wrapper's `echo exit code` was lost — so the digest, which
+# had no other end marker to read, inferred a death that never happened.
+
+KILLED_WRAPPER = """[05/09/2026 19:30:01.96] ingestion.upcoming start 
+  Premier League: 69 events -> {'created': 0}
+  EFL Cup: 74 events -> {'created': 0}
+  espn team rows -> {'written': 0, 'no_stats': 23}
+[05/09/2026 19:30:15.02] exit code 0 (python)
+[05/09/2026 20:00:02.63] ingestion.upcoming start 
+  Premier League: 70 events -> {'created': 0}
+[05/09/2026 20:00:12.01] exit code 0 
+"""
+
+TRULY_KILLED = """[05/09/2026 19:30:01.96] ingestion.upcoming start 
+  Premier League: 69 events -> {'created': 0}
+[05/09/2026 20:00:02.63] ingestion.upcoming start 
+  Premier League: 70 events -> {'created': 0}
+[05/09/2026 20:00:12.01] exit code 0 
+"""
+
+
+def test_a_run_that_marked_its_own_end_is_not_reported_as_killed():
+    """The wrapper's line is gone, but the job recorded its own outcome, so the
+    run is what it actually was: a success."""
+    runs = parse_runs("upcoming", KILLED_WRAPPER)
+    assert [r.exit_code for r in runs] == [0, 0]
+    assert NO_EXIT_LINE not in [r.exit_code for r in runs]
+
+
+def test_a_run_with_no_end_marker_at_all_is_still_a_failure():
+    """Guards against over-fixing. A job that genuinely dies mid-flight writes
+    neither marker, and that must still be caught — it is the whole reason the
+    NO_EXIT_LINE branch exists."""
+    runs = parse_runs("upcoming", TRULY_KILLED)
+    assert runs[0].exit_code == NO_EXIT_LINE
+
+
+def test_a_self_marked_failure_keeps_its_exit_code():
+    """The marker carries the real code, not merely 'it ended'."""
+    text = KILLED_WRAPPER.replace("exit code 0 (python)", "exit code 1 (python)")
+    assert parse_runs("upcoming", text)[0].exit_code == 1
+
+
+def test_the_digest_understands_the_marker_the_job_writes():
+    """What every job writes has to be what the digest reads. The format lives
+    beside the parser for that reason, and this pins the two together — the
+    drift is precisely how the outcome went unrecorded in the first place.
+    """
+    line = run_end_marker(0, dt.datetime(2026, 9, 5, 19, 30, 15))
+    text = f"[05/09/2026 19:30:01.96] ingestion.upcoming start \n{line}\n"
+    runs = parse_runs("upcoming", text + "[05/09/2026 20:00:02.63] ingestion.upcoming start \n")
+    assert runs[0].exit_code == 0
+
+
+def test_both_markers_present_counts_as_one_run():
+    """The normal case once the job marks its own end: python writes the marker,
+    then the surviving wrapper writes its own. Two lines, ONE run — a duplicate
+    would inflate every 'of N run(s)' figure in the digest."""
+    text = (
+        "[05/09/2026 19:30:01.96] ingestion.upcoming start \n"
+        "  Premier League: 69 events -> {'created': 0}\n"
+        "[05/09/2026 19:30:15.02] exit code 0 (python)\n"
+        "[05/09/2026 19:30:15.10] exit code 0 \n"
+    )
+    assert len(parse_runs("upcoming", text)) == 1
+
+
+def test_the_marker_is_job_independent():
+    """All four jobs write the same line — nightly, upcoming, matchday and
+    squads — so the format must carry no job name of its own. `parse_runs`
+    takes the job from the log it is reading, which is what lets one helper
+    serve every wrapper."""
+    line = run_end_marker(0, dt.datetime(2026, 9, 6, 8, 0, 30))
+    for job in ("nightly", "upcoming", "matchday", "squads"):
+        text = (
+            f"[06/09/2026  8:00:01.00] ingestion.{job} start \n"
+            f"{line}\n"
+            f"[06/09/2026  9:00:01.00] ingestion.{job} start \n"
+        )
+        runs = parse_runs(job, text)
+        assert runs[0].exit_code == 0, job
+        assert runs[0].job == job

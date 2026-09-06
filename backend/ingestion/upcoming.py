@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, aliased
 from app.db import SessionLocal
 from app.models.facts import Fixture
 from app.models.reference import Competition, Team
+from ingestion.digest import run_end_marker
 from ingestion.names import normalise_for_match
 
 # Operator-facing: competition name -> ESPN league slug. The scoreboard API is
@@ -835,10 +836,14 @@ if __name__ == "__main__":
     # Leftover alias work, or a slate that has stopped marking played matches
     # finished — the latter silently stalls FBref ingestion downstream, so it
     # must alarm here rather than be discovered weeks later (ADR 0014).
-    sys.exit(
+    code = (
         1
         if result.get("_unresolved_cups")
         or result.get("_stalled")
         or result.get("_unknown_slugs")
         else 0
     )
+    # Recorded from inside the process that did the work, and FLUSHED, so the
+    # outcome survives whatever happens to the wrapper afterwards.
+    print(run_end_marker(code), flush=True)
+    sys.exit(code)

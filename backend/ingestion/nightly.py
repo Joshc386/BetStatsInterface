@@ -177,4 +177,22 @@ def run_nightly(
 
 
 if __name__ == "__main__":
-    run_nightly()
+    import sys
+    import traceback
+
+    from ingestion.digest import run_end_marker
+
+    # `run_nightly` reports failure by RAISING — a league already being played
+    # that returned nothing is not a warning. Catching it here changes nothing a
+    # reader sees (the traceback still reaches the log through the wrapper's
+    # 2>&1, and the exit code is still 1); it only lets the run record its own
+    # outcome first. `Exception`, not `BaseException`, so a Ctrl-C still leaves
+    # NO marker and is still reported as the mid-flight death it is.
+    code = 0
+    try:
+        run_nightly()
+    except Exception:
+        traceback.print_exc()
+        code = 1
+    print(run_end_marker(code), flush=True)
+    sys.exit(code)
