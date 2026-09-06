@@ -11,7 +11,14 @@ So the digest collapses identical failures and reports them once, on demand.
 
 import datetime as dt
 
-from ingestion.digest import NO_EXIT_LINE, Run, build, parse_runs, summarise
+from ingestion.digest import (
+    NO_EXIT_LINE,
+    Run,
+    build,
+    parse_runs,
+    run_end_marker,
+    summarise,
+)
 
 NOW = dt.datetime(2026, 8, 27, 20, 0)
 
@@ -219,12 +226,10 @@ def test_a_self_marked_failure_keeps_its_exit_code():
 
 
 def test_the_digest_understands_the_marker_the_job_writes():
-    """The contract between the two modules: `upcoming` writes this line and
-    `digest` has to parse it. Asserting the format in either module alone would
-    let them drift apart silently — which is precisely how the outcome went
-    unrecorded in the first place."""
-    from ingestion.upcoming import run_end_marker
-
+    """What every job writes has to be what the digest reads. The format lives
+    beside the parser for that reason, and this pins the two together — the
+    drift is precisely how the outcome went unrecorded in the first place.
+    """
     line = run_end_marker(0, dt.datetime(2026, 9, 5, 19, 30, 15))
     text = f"[05/09/2026 19:30:01.96] ingestion.upcoming start \n{line}\n"
     runs = parse_runs("upcoming", text + "[05/09/2026 20:00:02.63] ingestion.upcoming start \n")
@@ -242,3 +247,20 @@ def test_both_markers_present_counts_as_one_run():
         "[05/09/2026 19:30:15.10] exit code 0 \n"
     )
     assert len(parse_runs("upcoming", text)) == 1
+
+
+def test_the_marker_is_job_independent():
+    """All four jobs write the same line — nightly, upcoming, matchday and
+    squads — so the format must carry no job name of its own. `parse_runs`
+    takes the job from the log it is reading, which is what lets one helper
+    serve every wrapper."""
+    line = run_end_marker(0, dt.datetime(2026, 9, 6, 8, 0, 30))
+    for job in ("nightly", "upcoming", "matchday", "squads"):
+        text = (
+            f"[06/09/2026  8:00:01.00] ingestion.{job} start \n"
+            f"{line}\n"
+            f"[06/09/2026  9:00:01.00] ingestion.{job} start \n"
+        )
+        runs = parse_runs(job, text)
+        assert runs[0].exit_code == 0, job
+        assert runs[0].job == job

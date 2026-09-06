@@ -40,6 +40,7 @@ from sqlalchemy import select
 from ingestion import coverage, cups, players, run_backfill, upcoming
 from app.db import SessionLocal
 from app.models.reference import Competition
+from ingestion.digest import run_end_marker
 from ingestion.upcoming import season_for
 
 # Player competitions by ingestion path (see ingestion.run_backfill routing).
@@ -256,9 +257,15 @@ if __name__ == "__main__":
     # if player data is still overdue after the run — including on the
     # "nothing to do" path, where a clean exit is precisely what hid the ADR
     # 0014 failure. "Nothing to do" is only success if the audit agrees.
-    sys.exit(
+    code = (
         1
         if any(code != 0 for code in report["results"].values())
         or report.get("overdue")
         else 0
     )
+    # Recorded from inside the process that did the work, and FLUSHED, so the
+    # outcome survives whatever happens to the wrapper (digest.run_end_marker).
+    # This job is the most exposed of the four: a 3-hour limit and the longest
+    # runs, so it has the widest window in which to be terminated.
+    print(run_end_marker(code), flush=True)
+    sys.exit(code)

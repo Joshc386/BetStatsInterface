@@ -45,7 +45,7 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 # while the python child completed the work as an orphan, so only the wrapper's
 # `exit code` line was missing. The branch was right and the diagnosis was
 # wrong. Jobs now mark their own end from inside the process that did the work
-# (`upcoming.run_end_marker`), so a missing marker means what this branch has
+# (`run_end_marker` below), so a missing marker means what this branch has
 # always claimed it means. 28/08 14:30 was a genuine one — a Ctrl-C.
 NO_EXIT_LINE = -1
 
@@ -79,6 +79,41 @@ _NOISE = re.compile(
     # SHAPE rather than each label avoids re-fixing this per new counter.
     r"-> \{.*\}",
 )
+
+
+def run_end_marker(exit_code: int, now: dt.datetime | None = None) -> str:
+    """This run's own end-of-run line, in the grammar the digest already parses.
+
+    Each job's .cmd wrapper echoes `exit code N` once python returns, and that
+    was the ONLY record that a run had finished. It is written by the WRAPPER,
+    so anything that kills the wrapper erases the evidence that the work
+    succeeded — and the digest, having nothing else to read, reports a
+    completed run as killed mid-flight.
+
+    Defined HERE, beside the regex that reads it, because a format split
+    across two modules is exactly the drift that left the outcome unrecorded
+    in the first place. The four jobs import it; they do not restate it.
+
+    That is not hypothetical: the 19:30 slot was reported dead on six nights
+    (26/08 and 01-05/09/2026) having completed every time. Task Scheduler
+    terminated the wrapper ~600ms after launch (event 111, rc 0x8007050B) while
+    the python child survived as an orphan and finished ~10s later. Nothing was
+    lost but the line — `ingest_upcoming` commits each competition before it
+    logs it, so every printed summary is a committed one.
+
+    Writing the marker here puts the record inside the process that did the
+    work. A run that genuinely dies mid-flight still writes neither marker and
+    is still reported, which is the distinction the digest exists to make.
+
+    The `(python)` suffix only says which of the two wrote it; the digest's
+    matcher stops at the code. On a normal run the wrapper's line still follows
+    and is ignored — the run is already closed, so it cannot double-count.
+    """
+    now = now or dt.datetime.now()
+    return (
+        f"[{now:%d/%m/%Y %H:%M:%S}.{now.microsecond // 10000:02d}] "
+        f"exit code {exit_code} (python)"
+    )
 
 
 @dataclass(frozen=True)

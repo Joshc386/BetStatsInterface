@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, aliased
 from app.db import SessionLocal
 from app.models.facts import Fixture
 from app.models.reference import Competition, Team
+from ingestion.digest import run_end_marker
 from ingestion.names import normalise_for_match
 
 # Operator-facing: competition name -> ESPN league slug. The scoreboard API is
@@ -78,37 +79,6 @@ STALLED_AFTER = dt.timedelta(hours=24)
 # nothing but football-data.co.uk ever marked a league Fixture finished, so an
 # unpublished CSV withdrew the Fixture from FBref's player pipeline as well.
 LOOKBACK_DAYS = 30
-
-
-def run_end_marker(exit_code: int, now: dt.datetime | None = None) -> str:
-    """This run's own end-of-run line, in the grammar the digest already parses.
-
-    `run_upcoming.cmd` echoes `exit code N` once python returns, and that was
-    the ONLY record that a run had finished. It is written by the WRAPPER, so
-    anything that kills the wrapper erases the evidence that the work
-    succeeded — and the digest, having nothing else to read, reports a
-    completed run as killed mid-flight.
-
-    That is not hypothetical: the 19:30 slot was reported dead on six nights
-    (26/08 and 01-05/09/2026) having completed every time. Task Scheduler
-    terminated the wrapper ~600ms after launch (event 111, rc 0x8007050B) while
-    the python child survived as an orphan and finished ~10s later. Nothing was
-    lost but the line — `ingest_upcoming` commits each competition before it
-    logs it, so every printed summary is a committed one.
-
-    Writing the marker here puts the record inside the process that did the
-    work. A run that genuinely dies mid-flight still writes neither marker and
-    is still reported, which is the distinction the digest exists to make.
-
-    The `(python)` suffix only says which of the two wrote it; the digest's
-    matcher stops at the code. On a normal run the wrapper's line still follows
-    and is ignored — the run is already closed, so it cannot double-count.
-    """
-    now = now or dt.datetime.now()
-    return (
-        f"[{now:%d/%m/%Y %H:%M:%S}.{now.microsecond // 10000:02d}] "
-        f"exit code {exit_code} (python)"
-    )
 
 
 def takes_finished(competition_type: str) -> bool:
