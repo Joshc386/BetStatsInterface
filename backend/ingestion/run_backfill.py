@@ -33,6 +33,7 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch
 from app.models.reference import Competition
+from ingestion import cups
 from ingestion.cups import LEAGUE_IDS as CUP_LEAGUE_IDS
 from ingestion.internationals import LEAGUE_IDS as INTL_LEAGUE_IDS
 
@@ -140,23 +141,68 @@ def _last_error(max_bytes: int = 20_000) -> str | None:
     return hits[-1] if hits else None
 
 
+def _team_row_competitions(competition_name: str) -> list[str]:
+    """Competitions whose team_match rows this run should build from cache.
+
+    Decided by Competition TYPE, never a hardcoded list. A `club_cup` /
+    `club_european` competition's team data comes from the cached FBref match
+    pages the ingest has just filled; a `club_league`'s comes from
+    football-data.co.uk (ADR 0001) and must never be built here. The play-off
+    sibling is `club_cup`, which is exactly why a league run has one to build
+    and the Premier League — no sibling — has none.
+
+    Internationals fall out for two reasons: their type is not cup-shaped, and
+    the selector this is called with ("WC Qual UEFA") is not a stored
+    competition name anyway. That matters — on that path `season` is a
+    soccerdata FETCH EDITION, not a stored season, so it must never reach a
+    writer that would take it literally.
+    """
+    candidates = [competition_name, f"{competition_name} Play-offs"]
+    with SessionLocal() as session:
+        cup_shaped = {
+            name
+            for name, ctype in session.execute(
+                select(Competition.name, Competition.type).where(
+                    Competition.name.in_(candidates)
+                )
+            ).all()
+            if ctype in ("club_cup", "club_european")
+        }
+    return [name for name in candidates if name in cup_shaped]
+
+
 def run(season: str = "2526", competition_name: str = "Premier League") -> int:
     _set_sleep_blocked(True)
     print("[watchdog] system idle-sleep blocked for the run", flush=True)
     try:
         if competition_name in CUP_LEAGUE_IDS:
-            return _run_schedule_driven(
+            code = _run_schedule_driven(
                 season, competition_name, "ingestion.cups", _cup_ingested, "cup"
             )
-        if competition_name in INTL_LEAGUE_IDS:
+        elif competition_name in INTL_LEAGUE_IDS:
             # internationals are schedule-driven like cups; `season` here is the
             # soccerdata fetch-edition code, and progress is counted per
             # competition (the stored season is date-derived, so not the edition).
-            return _run_schedule_driven(
+            code = _run_schedule_driven(
                 season, competition_name, "ingestion.internationals",
                 lambda _s, c: _intl_ingested(c), "international",
             )
-        return _run(season, competition_name)
+        else:
+            code = _run(season, competition_name)
+
+        # Zero-network, idempotent, and deliberately UNCONDITIONAL — it belongs
+        # to the ingest, not to whoever called it. It used to live in `matchday`,
+        # so a backfill run straight from the command line (how every historical
+        # stage is run) produced no team rows at all and nobody noticed until
+        # three were missing. Run on the failure path too: a partial ingest still
+        # cached pages worth turning into rows, and the pass skips any fixture
+        # with no cached page. Run on the nothing-pending path too: that is what
+        # lets a re-run repair a backlog whose player data already landed.
+        for team_row_comp in _team_row_competitions(competition_name):
+            print(f"[watchdog] building {team_row_comp} team_match rows "
+                  "(zero network)", flush=True)
+            cups.backfill_cup_team_match(season, cup_name=team_row_comp)
+        return code
     finally:
         _set_sleep_blocked(False)
 
