@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models.reference import Competition
-from ingestion import coverage, matchday
+from ingestion import coverage, matchday, run_backfill
 from ingestion.matchday import (
     ALL_PLAYER_COMPETITIONS,
     CUP_PLAYER_COMPETITIONS,
@@ -115,7 +115,6 @@ def _isolate(monkeypatch, pending: dict[str, int], *, espn: dict | None = None):
     monkeypatch.setattr(
         matchday.run_backfill, "run", lambda season, comp: ran.append(comp) or 0
     )
-    monkeypatch.setattr(matchday.cups, "backfill_cup_team_match", lambda *a, **k: None)
     monkeypatch.setattr(matchday, "_sweep_orphans", lambda log=print: None)
     return ran
 
@@ -263,35 +262,77 @@ def test_pending_is_unchanged_for_a_cup():
     with SessionLocal() as session:
         ids = matchday.run_backfill._competition_ids(session, "FA Cup")
     assert len(ids) == 1
-
-
-def test_a_league_run_builds_its_playoff_team_rows(monkeypatch):
-    """Play-off team rows were the third gap: matchday built them only for
-    CUP_PLAYER_COMPETITIONS, so the Championship Play-offs rows that exist were
-    put there by a hand-run `cups team` (ADR 0004 deferred them; ADR 0008's
-    follow-up did them manually)."""
-    _isolate(monkeypatch, {"Championship": 3})
+def _no_ingest(monkeypatch, code: int = 0):
+    """Stub out everything `run` does except the team-row pass."""
     built: list[str] = []
+    monkeypatch.setattr(run_backfill, "_set_sleep_blocked", lambda on: None)
+    monkeypatch.setattr(run_backfill, "_run", lambda season, comp: code)
     monkeypatch.setattr(
-        matchday.cups,
+        run_backfill,
+        "_run_schedule_driven",
+        lambda season, comp, module, count_fn, kind: code,
+    )
+    monkeypatch.setattr(
+        run_backfill.cups,
         "backfill_cup_team_match",
         lambda season, cup_name, log=print: built.append(cup_name),
     )
-
-    matchday.run_matchday(season="2627", log=lambda *a, **k: None)
-
-    assert built == ["Championship Play-offs"]
+    return built
 
 
-def test_a_league_with_no_playoff_competition_builds_nothing(monkeypatch):
-    _isolate(monkeypatch, {"Premier League": 3})
-    built: list[str] = []
-    monkeypatch.setattr(
-        matchday.cups,
-        "backfill_cup_team_match",
-        lambda season, cup_name, log=print: built.append(cup_name),
-    )
+def test_a_league_backfill_builds_its_playoff_team_rows(monkeypatch):
+    built = _no_ingest(monkeypatch)
+    assert run_backfill.run("2526", "League One") == 0
+    assert built == ["League One Play-offs"]
 
-    matchday.run_matchday(season="2627", log=lambda *a, **k: None)
 
+def test_a_league_with_no_playoffs_builds_nothing(monkeypatch):
+    built = _no_ingest(monkeypatch)
+    run_backfill.run("2526", "Premier League")
     assert built == []
+
+
+def test_a_cup_backfill_builds_its_own_team_rows(monkeypatch):
+    built = _no_ingest(monkeypatch)
+    run_backfill.run("2425", "FA Cup")
+    assert built == ["FA Cup"]
+
+
+def test_a_completed_stage_still_builds_missing_team_rows(monkeypatch):
+    """`_run` returns 0 immediately when nothing is pending. The pass must still
+    happen on that path — it is what lets a re-run repair a backlog of team rows
+    whose player data already landed, with no re-fetch."""
+    built = _no_ingest(monkeypatch)
+    assert run_backfill.run("2425", "League One") == 0
+    assert built == ["League One Play-offs"]
+
+
+def test_team_rows_are_built_even_when_the_watchdog_gave_up(monkeypatch):
+    """A partial ingest still cached pages worth turning into rows, and the pass
+    skips any fixture with no cached page. Failing the run must not also discard
+    the rows it did earn."""
+    built = _no_ingest(monkeypatch, code=1)
+    assert run_backfill.run("2526", "League One") == 1
+    assert built == ["League One Play-offs"]
+
+
+def test_an_international_selector_builds_nothing():
+    """Internationals get their team rows from `ingestion.internationals team`,
+    never the cups pass — and the selector ('WC Qual UEFA') is not a stored
+    competition name at all, so nothing matches. Guards against the `season`
+    argument, which on that path is a FETCH EDITION rather than a stored season,
+    reaching a writer that would take it literally."""
+    assert run_backfill._team_row_competitions("WC Qual UEFA") == []
+    assert run_backfill._team_row_competitions("World Cup Qualifiers") == []
+
+
+def test_team_row_competitions_is_decided_by_competition_type():
+    """The rule is the TYPE, not a hardcoded list: cup-shaped competitions get
+    rows from the cached match pages, league-shaped ones get theirs from
+    football-data.co.uk (ADR 0001) and must never be built here."""
+    assert run_backfill._team_row_competitions("League One") == ["League One Play-offs"]
+    assert run_backfill._team_row_competitions("Championship") == [
+        "Championship Play-offs"
+    ]
+    assert run_backfill._team_row_competitions("FA Cup") == ["FA Cup"]
+    assert run_backfill._team_row_competitions("Premier League") == []

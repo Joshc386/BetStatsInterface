@@ -163,9 +163,13 @@ python -m venv .venv
 
 # cup team_match (ADR 0008 follow-up — zero-network, idempotent; run AFTER the cup player backfill)
 .venv/Scripts/python.exe -m ingestion.cups team 2425 "FA Cup"  # 2 team_match rows/fixture from cached scorebox + team_stats_extra corners + player-row sums; also accepts "Championship Play-offs"
-# PLAY-OFF team rows no longer need this by hand: since ADR 0017 matchday runs
-# the same pass for "<league> Play-offs" after a league run. Still the way to
-# rebuild an OLD play-off season.
+# PLAY-OFF team rows no longer need this by hand: run_backfill runs this same
+# pass itself after ANY backfill -- league (builds "<league> Play-offs"), cup or
+# European -- so matchday and a hand-run stage both get them. It lived in
+# matchday until 11/09/2026, which meant a command-line stage built nothing and
+# three play-off seasons went without. Decided by competition TYPE, never a
+# list. It also runs on the NOTHING-PENDING path, so re-running a finished stage
+# repairs missing team rows with zero network -- that is the repair command now.
 
 # upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; idempotent)
 .venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
