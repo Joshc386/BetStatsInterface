@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Competition, type TableRow } from '../api'
+import { KitShirt } from '../components/Kit'
+import { kitOf } from '../lib/teamTheme'
 
 // Computed league table (ADR 0010) — standings derived from our own team_match
 // rows; points deductions applied and footnoted, never fetched from a provider.
@@ -82,7 +84,7 @@ export default function TablePage() {
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted">No results for this season.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
+        <div className="overflow-x-auto rounded-lg border border-line bg-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs text-muted">
@@ -105,6 +107,7 @@ export default function TablePage() {
                     {r.position}
                   </td>
                   <td className="px-3 py-1.5">
+                    <KitShirt kit={kitOf(r.team_id)} className="-mt-0.5 mr-2 inline h-4 w-4" />
                     <Link
                       to={`/team/${r.team_id}`}
                       className="text-ink hover:underline"

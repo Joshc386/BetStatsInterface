@@ -9,6 +9,8 @@ import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 import {
   ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
 } from '../components/controls'
+import { Hero, KitShirt } from '../components/Kit'
+import { kitOf, teamTheme, themeStyle } from '../lib/teamTheme'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -111,14 +113,16 @@ export default function EntityView({ entity }: { entity: Entity }) {
     compName ?? 'all competitions'
   }`
 
+  const theme = teamTheme(entity === 'team' ? entityId : null)
+
   return (
-    <div>
-      <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold text-ink">
-          {summary?.entity_name ?? (loading ? '…' : `#${entityId}`)}
-        </h1>
-        <span className="text-sm text-muted capitalize">{entity}</span>
-      </div>
+    <div style={themeStyle(theme)}>
+      <Hero
+        theme={theme}
+        className="mb-4 rounded-xl shadow-sm"
+        title={summary?.entity_name ?? (loading ? '…' : `#${entityId}`)}
+        subtitle={entity === 'team' ? 'Team hub' : 'Player'}
+      />
 
       {entity === 'team' && Number.isFinite(entityId) && (
         <>
@@ -314,6 +318,10 @@ function NextFixtures({ teamId }: { teamId: number }) {
                 })}
               </span>{' '}
               <span className="text-faint">{isHome ? 'v' : '@'}</span>{' '}
+              <KitShirt
+                kit={kitOf(isHome ? f.away_id : f.home_id)}
+                className="-mt-0.5 mr-1 inline h-4 w-4"
+              />
               <span className="text-ink">
                 {isHome ? f.away_name : f.home_name}
               </span>
@@ -441,56 +449,58 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
   // "which of these games stand out", not "how does this compare to all football".
   const max = Math.max(0, ...rows.map((r) => r.value ?? 0))
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b border-line text-left text-muted">
-          <th className="py-2 pr-3 font-normal">Date</th>
-          <th className="w-8 py-2 pr-3 font-normal" />
-          <th className="py-2 pr-3 font-normal">Opponent</th>
-          <th className="py-2 pr-3 font-normal">H/A</th>
-          {isPlayer && <th className="py-2 pr-3 text-right font-normal">Min</th>}
-          <th className="py-2 pr-3 text-right font-normal" colSpan={2}>
-            {label(s.metric)}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i} className="border-b border-line-soft hover:bg-sunken">
-            <td className="py-1.5 pr-3 text-muted">
-              {new Date(r.date).toLocaleDateString('en-GB')}
-            </td>
-            <td className="py-1.5 pr-3">
-              <ResultChip result={r.result} />
-            </td>
-            <td className="py-1.5 pr-3 text-ink">
-              <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
-            </td>
-            <td className="py-1.5 pr-3 text-muted">
-              {r.is_home ? 'H' : 'A'}
-            </td>
-            {isPlayer && (
-              <td className="py-1.5 pr-3 text-right text-muted">
-                {fmt(r.minutes, 0)}
-              </td>
-            )}
-            <td className="w-24 py-1.5 pr-3">
-              <ValueBar fraction={barFraction(r.value, max)} />
-            </td>
-            <td className="w-14 py-1.5 pr-3 text-right font-medium text-ink">
-              {fmt(r.value)}
-            </td>
+    <div className="rounded-lg border border-line bg-card px-3">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-line text-left text-muted">
+            <th className="py-2 pr-3 font-normal">Date</th>
+            <th className="w-8 py-2 pr-3 font-normal" />
+            <th className="py-2 pr-3 font-normal">Opponent</th>
+            <th className="py-2 pr-3 font-normal">H/A</th>
+            {isPlayer && <th className="py-2 pr-3 text-right font-normal">Min</th>}
+            <th className="py-2 pr-3 text-right font-normal" colSpan={2}>
+              {label(s.metric)}
+            </th>
           </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr className="text-ink-2">
-          <td className="py-2 pr-3 font-medium" colSpan={isPlayer ? 6 : 5}>
-            Total ({s.games} games)
-          </td>
-          <td className="py-2 pr-3 text-right font-semibold">{fmt(s.total)}</td>
-        </tr>
-      </tfoot>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-line-soft hover:bg-sunken">
+              <td className="py-1.5 pr-3 text-muted">
+                {new Date(r.date).toLocaleDateString('en-GB')}
+              </td>
+              <td className="py-1.5 pr-3">
+                <ResultChip result={r.result} />
+              </td>
+              <td className="py-1.5 pr-3 text-ink">
+                <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
+              </td>
+              <td className="py-1.5 pr-3 text-muted">
+                {r.is_home ? 'H' : 'A'}
+              </td>
+              {isPlayer && (
+                <td className="py-1.5 pr-3 text-right text-muted">
+                  {fmt(r.minutes, 0)}
+                </td>
+              )}
+              <td className="w-24 py-1.5 pr-3">
+                <ValueBar fraction={barFraction(r.value, max)} />
+              </td>
+              <td className="w-14 py-1.5 pr-3 text-right font-medium text-ink">
+                {fmt(r.value)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="text-ink-2">
+            <td className="py-2 pr-3 font-medium" colSpan={isPlayer ? 6 : 5}>
+              Total ({s.games} games)
+            </td>
+            <td className="py-2 pr-3 text-right font-semibold">{fmt(s.total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   )
 }

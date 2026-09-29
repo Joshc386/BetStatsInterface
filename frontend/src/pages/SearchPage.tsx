@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import { api, type UpcomingFixture } from '../api'
+import { KitShirt } from '../components/Kit'
+import { kitOf } from '../lib/teamTheme'
 
 const SHOW = 20 // nearest games only — the horizon self-adjusts across the season
 
@@ -85,7 +87,9 @@ function UpcomingSlate() {
                   <span className="flex-1 truncate text-right text-ink">
                     {f.home_name}
                   </span>
+                  <KitShirt kit={kitOf(f.home_id)} />
                   <span className="text-xs text-faint">vs</span>
+                  <KitShirt kit={kitOf(f.away_id)} />
                   <span className="flex-1 truncate text-ink">
                     {f.away_name}
                   </span>

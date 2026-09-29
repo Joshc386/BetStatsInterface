@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api, type BreakdownRow, type Summary } from '../api'
 import { useCatalogue } from '../useCatalogue'
 import { LastNInput } from '../components/LastNInput'
@@ -8,6 +8,8 @@ import {
 } from '../components/controls'
 import { EntityLink, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
+import { Hero, KitShirt } from '../components/Kit'
+import { kitOf, teamTheme, themeStyle } from '../lib/teamTheme'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -153,14 +155,32 @@ export default function PlayerView() {
         ? seasonFmt(playerSeasons[0] ?? '')
         : `Last ${seasonCount} seasons`
 
+  // His current club's colours — or, drilled into one Spell, that club's.
+  const theme = teamTheme(teamFilter?.id ?? summary?.current_team_id)
+
   return (
-    <div>
-      <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold text-ink">
-          {summary?.entity_name ?? (loading ? '…' : `#${playerId}`)}
-        </h1>
-        <span className="text-sm text-muted">player</span>
-      </div>
+    <div style={themeStyle(theme)}>
+      <Hero
+        theme={theme}
+        className="mb-4 rounded-xl shadow-sm"
+        title={summary?.entity_name ?? (loading ? '…' : `#${playerId}`)}
+        subtitle={
+          <>
+            Player
+            {summary?.current_team_id != null && (
+              <>
+                {' · '}
+                <Link
+                  to={`/team/${summary.current_team_id}`}
+                  className="underline decoration-1 underline-offset-2 hover:decoration-2"
+                >
+                  {summary.current_team}
+                </Link>
+              </>
+            )}
+          </>
+        }
+      />
 
       {/* active drill-in filters */}
       {(teamFilter || compFilter || opponentFilter) && (
@@ -322,7 +342,9 @@ export default function PlayerView() {
                   }}
                 />
               ) : (
-                <FlatBreakdown rows={summary.breakdown} />
+                <div className="rounded-lg border border-line bg-card">
+                  <FlatBreakdown rows={summary.breakdown} />
+                </div>
               )}
             </>
           )}
@@ -344,13 +366,16 @@ function GroupedBreakdown({
   return (
     <div className="space-y-4">
       {groups.map((g) => (
-        <div key={g.key} className="overflow-hidden rounded-lg border border-line">
+        <div key={g.key} className="overflow-hidden rounded-lg border border-line bg-card">
           <button
             onClick={() => onPick(g)}
             title={`Filter to ${g.label}`}
             className="flex w-full items-center justify-between bg-sunken px-3 py-2 text-left hover:bg-line-soft"
           >
-            <span className="font-medium text-ink">{g.label}</span>
+            <span className="flex items-center gap-2 font-medium text-ink">
+              {segment !== 'competition' && <KitShirt kit={kitOf(g.key)} />}
+              {g.label}
+            </span>
             <span className="text-sm text-muted">
               {label(metric)} <span className="font-semibold text-ink">{fmt(g.total)}</span> · {g.games} {g.games === 1 ? 'app' : 'apps'}
               <span className="ml-2 text-xs text-accent-ink">filter ↓</span>

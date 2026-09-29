@@ -17,6 +17,8 @@ import { ControlBar, ControlGroup, Field, Toggle, ctrl } from '../components/con
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { compareByFigure, membershipLabel } from '../lib/squadMembership'
 import { LastNInput } from '../components/LastNInput'
+import { KitShirt } from '../components/Kit'
+import { awayTheme, kitOf, teamTheme, themeStyle } from '../lib/teamTheme'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -236,7 +238,10 @@ export function SquadFormPanel({
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
       <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="font-medium text-ink">{data.team_name}</h3>
+        <h3 className="flex items-center gap-2 font-medium text-ink">
+          <KitShirt kit={kitOf(teamId)} />
+          {data.team_name}
+        </h3>
         <span className="text-xs text-muted">{membership.count}</span>
       </div>
       <p className="mb-2 text-xs text-faint">{membership.caption}</p>
@@ -252,7 +257,7 @@ export function SquadFormPanel({
             : 'Their appearances are in other scopes.'}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-line">
+        <div className="overflow-hidden rounded-lg border border-line bg-card">
           {computed.map((p) => (
             <PlayerRow key={p.player_id} p={p} metric={c.metric} />
           ))}
@@ -364,12 +369,18 @@ export function SquadSection({
   metricList: string[]
 }) {
   const state = useSquadControls()
+  // each squad in its side's colours, the away side in its change kit on a clash
+  const home = teamTheme(homeId)
   return (
     <>
       <SquadControls state={state} metricList={metricList} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SquadFormPanel teamId={homeId} state={state} />
-        <SquadFormPanel teamId={awayId} state={state} />
+        <div style={themeStyle(home)}>
+          <SquadFormPanel teamId={homeId} state={state} />
+        </div>
+        <div style={themeStyle(awayTheme(home, awayId))}>
+          <SquadFormPanel teamId={awayId} state={state} />
+        </div>
       </div>
     </>
   )

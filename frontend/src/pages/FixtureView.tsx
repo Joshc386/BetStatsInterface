@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api, type FixtureComparison, type FixtureRow } from '../api'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { useCatalogue } from '../useCatalogue'
 import { SquadSection } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
-import { EntityLink, teamHref } from '../components/EntityLink'
 import { resultClass } from '../components/ResultChip'
 import { ControlBar, ControlGroup, Field, Toggle } from '../components/controls'
+import { Hero, KitShirt } from '../components/Kit'
+import { awayTheme, kitOf, teamTheme, themeStyle, type Theme } from '../lib/teamTheme'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -62,6 +63,12 @@ const aggLabel = (rows: FixtureRow[], m: MetricDef) => {
 }
 
 const date = (d: string) => new Date(d).toLocaleDateString('en-GB')
+
+// Each side in its own colours; the away side changes kit on a clash.
+const sideThemes = (d: FixtureComparison) => {
+  const home = teamTheme(d.home_id)
+  return { home, away: awayTheme(home, d.away_id) }
+}
 
 export default function FixtureView() {
   const { homeId, awayId } = useParams()
@@ -139,14 +146,26 @@ export default function FixtureView() {
   const hWins = meetings.filter((m) => m.a.result === 'W').length
   const draws = meetings.filter((m) => m.a.result === 'D').length
   const aWins = meetings.filter((m) => m.a.result === 'L').length
+  const themes = sideThemes(data)
 
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-      <h1 className="mb-1 text-2xl font-semibold text-ink">
-        <EntityLink to={teamHref(data.home_id)}>{data.home_name}</EntityLink>{' '}
-        <span className="text-muted">vs</span>{' '}
-        <EntityLink to={teamHref(data.away_id)}>{data.away_name}</EntityLink>
-      </h1>
+      <div className="relative mb-2 grid overflow-hidden rounded-xl shadow-sm sm:grid-cols-2">
+        <Hero
+          theme={themes.home}
+          title={<Link to={`/team/${data.home_id}`} className="hover:underline">{data.home_name}</Link>}
+          subtitle="Home"
+        />
+        <Hero
+          theme={themes.away}
+          mirror
+          title={<Link to={`/team/${data.away_id}`} className="hover:underline">{data.away_name}</Link>}
+          subtitle="Away"
+        />
+        <span className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 rounded-full bg-card px-2.5 py-1 text-xs font-bold text-ink shadow sm:block">
+          vs
+        </span>
+      </div>
       <p className="mb-4 text-sm text-muted">
         {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
         H2H: all meetings, every competition
@@ -240,12 +259,13 @@ function FormMode({
   setVenueHome: (v: Venue) => void
   setVenueAway: (v: Venue) => void
 }) {
+  const themes = sideThemes(data)
   return (
     <>
       {/* Per-team venue toggles */}
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <VenuePanel name={data.home_name} value={venueHome} onChange={setVenueHome} count={homeRows.length} />
-        <VenuePanel name={data.away_name} value={venueAway} onChange={setVenueAway} count={awayRows.length} />
+        <VenuePanel theme={themes.home} name={data.home_name} value={venueHome} onChange={setVenueHome} count={homeRows.length} />
+        <VenuePanel theme={themes.away} name={data.away_name} value={venueAway} onChange={setVenueAway} count={awayRows.length} />
       </div>
 
       {/* Comparison table */}
@@ -253,8 +273,8 @@ function FormMode({
         <thead>
           <tr className="border-b border-line text-muted">
             <th className="py-2 text-left font-normal">Metric</th>
-            <th className="py-2 text-right font-normal">{data.home_name}</th>
-            <th className="py-2 text-right font-normal">{data.away_name}</th>
+            <SideHeader theme={themes.home} name={data.home_name} />
+            <SideHeader theme={themes.away} name={data.away_name} />
           </tr>
         </thead>
         <tbody>
@@ -270,11 +290,13 @@ function FormMode({
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <FixtureList
+          theme={themes.home}
           title={`${data.home_name} — ${venueTitle(venueHome)}`}
           rows={homeRows}
           scopeEmpty={data.home.length === 0}
         />
         <FixtureList
+          theme={themes.away}
           title={`${data.away_name} — ${venueTitle(venueAway)}`}
           rows={awayRows}
           scopeEmpty={data.away.length === 0}
@@ -312,15 +334,16 @@ function H2HMode({
         No meetings on record between {data.home_name} and {data.away_name} in the covered seasons.
       </p>
     )
+  const themes = sideThemes(data)
   const aMeetingRows = meetings.map((m) => m.a)
   const bMeetingRows = meetings.map((m) => m.b)
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-3">
-          <Record label={`${data.home_name} wins`} value={record.hWins} tone="emerald" />
-          <Record label="Draws" value={record.draws} tone="slate" />
-          <Record label={`${data.away_name} wins`} value={record.aWins} tone="rose" />
+          <Record label={`${data.home_name} wins`} value={record.hWins} theme={themes.home} />
+          <Record label="Draws" value={record.draws} />
+          <Record label={`${data.away_name} wins`} value={record.aWins} theme={themes.away} />
         </div>
         <div className="flex items-end gap-3">
           {comps.length > 1 && (
@@ -351,8 +374,8 @@ function H2HMode({
         <thead>
           <tr className="border-b border-line text-muted">
             <th className="py-2 text-left font-normal">Over {meetings.length} meetings</th>
-            <th className="py-2 text-right font-normal">{data.home_name}</th>
-            <th className="py-2 text-right font-normal">{data.away_name}</th>
+            <SideHeader theme={themes.home} name={data.home_name} />
+            <SideHeader theme={themes.away} name={data.away_name} />
           </tr>
         </thead>
         <tbody>
@@ -388,11 +411,17 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
       >
         <span className="w-24 shrink-0 text-xs text-muted">{date(m.date)}</span>
         <span className="w-28 shrink-0 text-xs text-faint">{m.competition}</span>
-        <span className="flex-1 text-right text-ink">{hostName}</span>
+        <span className="flex flex-1 items-center justify-end gap-2 text-ink">
+          {hostName}
+          <KitShirt kit={kitOf(m.host.team_id)} />
+        </span>
         <span className="rounded bg-ink px-2 py-0.5 font-semibold tabular-nums text-card">
           {m.host.gf}–{m.host.ga}
         </span>
-        <span className="flex-1 text-ink">{guestName}</span>
+        <span className="flex flex-1 items-center gap-2 text-ink">
+          <KitShirt kit={kitOf(m.guest.team_id)} />
+          {guestName}
+        </span>
       </button>
       {open && <DrillDown fixtureId={m.fixture_id} />}
     </div>
@@ -400,10 +429,12 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
 }
 
 function FixtureList({
+  theme,
   title,
   rows,
   scopeEmpty,
 }: {
+  theme: Theme
   title: string
   rows: FixtureRow[]
   scopeEmpty?: boolean
@@ -413,8 +444,9 @@ function FixtureList({
   // a sparse-coverage window can reach back years — say so rather than imply recent form
   const seasonSpan = new Set(rows.map((r) => r.season)).size
   return (
-    <div>
-      <h3 className="mb-2 text-sm text-muted">
+    <div style={themeStyle(theme)}>
+      <h3 className="mb-2 flex items-center gap-2 text-sm text-muted">
+        <KitShirt kit={theme.kit} />
         {title}
         {seasonSpan > 1 && (
           <span className="ml-2 text-xs text-faint">spans {seasonSpan} seasons</span>
@@ -505,11 +537,14 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
   )
 }
 
-function VenuePanel({ name, value, onChange, count }: { name: string; value: Venue; onChange: (v: Venue) => void; count: number }) {
+function VenuePanel({ theme, name, value, onChange, count }: { theme: Theme; name: string; value: Venue; onChange: (v: Venue) => void; count: number }) {
   return (
-    <div className="rounded-lg border border-line bg-card p-3">
+    <div style={themeStyle(theme)} className="rounded-lg border border-line border-t-4 border-t-accent bg-card p-3">
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="font-medium text-ink">{name}</span>
+        <span className="flex items-center gap-2 font-medium text-ink">
+          <KitShirt kit={theme.kit} />
+          {name}
+        </span>
         <span className="text-xs text-muted">{count} games</span>
       </div>
       <Toggle
@@ -527,16 +562,29 @@ function VenuePanel({ name, value, onChange, count }: { name: string; value: Ven
 
 
 
-function Record({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'slate' | 'rose' }) {
-  const tones = {
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-    slate: 'border-line bg-card text-ink-2',
-    rose: 'border-rose-200 bg-rose-50 text-rose-800',
-  }
+/** A side's win count in its own colours; draws (no theme) stay neutral. */
+function Record({ label, value, theme }: { label: string; value: number; theme?: Theme }) {
   return (
-    <div className={`rounded-lg border px-4 py-2 text-center ${tones[tone]}`}>
+    <div
+      style={theme && themeStyle(theme)}
+      className={`rounded-lg border px-4 py-2 text-center ${
+        theme ? 'border-accent/30 bg-accent/10 text-accent-ink' : 'border-line bg-card text-ink-2'
+      }`}
+    >
       <div className="text-xl font-semibold">{value}</div>
-      <div className="text-xs opacity-80">{label}</div>
+      <div className="text-xs">{label}</div>
     </div>
+  )
+}
+
+/** A comparison-table column head: the side's shirt and name. */
+function SideHeader({ theme, name }: { theme: Theme; name: string }) {
+  return (
+    <th className="py-2 text-right font-normal">
+      <span className="inline-flex items-center gap-1.5">
+        <KitShirt kit={theme.kit} />
+        {name}
+      </span>
+    </th>
   )
 }
