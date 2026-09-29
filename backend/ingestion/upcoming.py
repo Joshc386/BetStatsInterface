@@ -179,9 +179,10 @@ ESPN_TEAM_ALIASES: dict[str, str] = {
     "York City": "York",
 }
 
+# One calendar MONTH per request — see fetch_scoreboard for why not a range.
 _SCOREBOARD_URL = (
     "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard"
-    "?dates={start:%Y%m%d}-{end:%Y%m%d}&limit=400"
+    "?dates={month:%Y%m}&limit=400"
 )
 
 
@@ -237,9 +238,34 @@ def espn_json(url: str, *, timeout: int = 30) -> dict:
         return json.load(resp)
 
 
+def scoreboard_months(start: dt.date, end: dt.date) -> list[dt.date]:
+    """The first day of every calendar month the window [start, end] touches."""
+    months = []
+    month = start.replace(day=1)
+    while month <= end:
+        months.append(month)
+        month = (month + dt.timedelta(days=32)).replace(day=1)
+    return months
+
+
 def fetch_scoreboard(slug: str, start: dt.date, end: dt.date) -> dict:
-    """One league's scoreboard JSON for a date window. Raises on HTTP failure."""
-    return espn_json(_SCOREBOARD_URL.format(slug=slug, start=start, end=end))
+    """One league's scoreboard events for a date window. Raises on HTTP failure.
+
+    Asked for one calendar MONTH at a time. On 2026-09-16 ESPN stopped serving
+    date ranges: every ``dates=START-END`` answers 400 "Failed to get events
+    endpoint.", while a month (``dates=YYYYMM``) still returns the same payload
+    shape. So each month the window touches is one request (~4 for the usual
+    window, where the range was 1), each event is kept once, and anything
+    outside [start, end] is dropped — callers see what the range used to
+    return. Day-by-day requests were rejected: ~75x the traffic (ADR 0009).
+    """
+    events: dict[str, dict] = {}
+    for month in scoreboard_months(start, end):
+        payload = espn_json(_SCOREBOARD_URL.format(slug=slug, month=month))
+        for event in payload.get("events", []):
+            if start <= dt.date.fromisoformat(event["date"][:10]) <= end:
+                events.setdefault(event["id"], event)
+    return {"events": sorted(events.values(), key=lambda e: e["date"])}
 
 
 def scoreboard_window(
