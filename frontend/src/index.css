@@ -1,12 +1,36 @@
 @import "tailwindcss";
 
+/* The palette, named by role so a page never picks a raw grey. Light only.
+ *
+ * The three accent colours are the TEAM THEME: a team or player page overrides
+ * them inline (lib/teamTheme.ts), and every bg-accent / text-accent-ink below
+ * that element picks the club up. These defaults are the neutral pitch green,
+ * worn by every page with no club and every club we hold no colours for. */
+@theme {
+  --color-page: #f5f6f1;
+  --color-card: #ffffff;
+  --color-sunken: #eff1eb;
+  --color-line: #dbe0d5;
+  --color-line-soft: #eaede6;
+  --color-ink: #16202b;
+  --color-ink-2: #35404c;
+  --color-muted: #525d69;
+  --color-faint: #69737e;
+
+  --color-accent: #2d6a45; /* fills: hero band, selected toggle */
+  --color-on-accent: #ffffff; /* text on an accent fill */
+  --color-accent-ink: #2d6a45; /* accent as text/lines on a light surface */
+}
+
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  background: #0b0f17;
-  color: #e6e9ef;
+  /* mown-pitch stripes, barely there */
+  background: repeating-linear-gradient(90deg, #f6f7f2 0 110px, #f2f4ee 110px 220px);
+  color: var(--color-ink);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
 }

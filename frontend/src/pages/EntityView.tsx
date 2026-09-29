@@ -114,10 +114,10 @@ export default function EntityView({ entity }: { entity: Entity }) {
   return (
     <div>
       <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold text-slate-100">
+        <h1 className="text-2xl font-semibold text-ink">
           {summary?.entity_name ?? (loading ? '…' : `#${entityId}`)}
         </h1>
-        <span className="text-sm text-slate-500 capitalize">{entity}</span>
+        <span className="text-sm text-muted capitalize">{entity}</span>
       </div>
 
       {entity === 'team' && Number.isFinite(entityId) && (
@@ -239,7 +239,7 @@ export default function EntityView({ entity }: { entity: Entity }) {
       </ControlBar>
 
       {(error || catError) && (
-        <div className="mb-4 rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
+        <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {error ?? catError}
         </div>
       )}
@@ -252,11 +252,11 @@ export default function EntityView({ entity }: { entity: Entity }) {
           dim={loading}
         />
       )}
-      {loading && !summary && <p className="text-slate-500">Loading…</p>}
+      {loading && !summary && <p className="text-muted">Loading…</p>}
 
       {entity === 'team' && Number.isFinite(entityId) && (
         <section className="mt-10">
-          <h2 className="mb-3 text-lg font-semibold text-slate-200">Squad form</h2>
+          <h2 className="mb-3 text-lg font-semibold text-ink">Squad form</h2>
           <SingleSquad teamId={entityId} metricList={metrics?.player ?? []} />
         </section>
       )}
@@ -294,7 +294,7 @@ function NextFixtures({ teamId }: { teamId: number }) {
 
   return (
     <div className="mb-4">
-      <h2 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+      <h2 className="mb-1 text-xs uppercase tracking-wide text-muted">
         Next fixtures
       </h2>
       <div className="flex flex-wrap gap-2">
@@ -304,17 +304,17 @@ function NextFixtures({ teamId }: { teamId: number }) {
             <Link
               key={f.fixture_id}
               to={`/fixture/${f.home_id}/vs/${f.away_id}`}
-              className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-1.5 text-sm hover:border-sky-800 hover:bg-slate-900"
+              className="rounded-md border border-line bg-card px-3 py-1.5 text-sm hover:border-accent-ink"
             >
-              <span className="text-slate-500">
+              <span className="text-muted">
                 {new Date(f.date).toLocaleDateString('en-GB', {
                   weekday: 'short',
                   day: 'numeric',
                   month: 'short',
                 })}
               </span>{' '}
-              <span className="text-slate-600">{isHome ? 'v' : '@'}</span>{' '}
-              <span className="text-slate-100">
+              <span className="text-faint">{isHome ? 'v' : '@'}</span>{' '}
+              <span className="text-ink">
                 {isHome ? f.away_name : f.home_name}
               </span>
             </Link>
@@ -354,15 +354,15 @@ function OpponentPicker({ teamId }: { teamId: number }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="or compare head-to-head vs any team…"
-        className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600"
+        className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-sm text-ink outline-none focus:border-accent-ink"
       />
       {hits.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-lg">
+        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-line bg-card shadow-lg">
           {hits.slice(0, 8).map((h) => (
             <li key={h.id}>
               <button
                 onMouseDown={() => navigate(`/fixture/${teamId}/vs/${h.id}`)}
-                className="block w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-sky-800"
+                className="block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-sunken"
               >
                 {h.name}
               </button>
@@ -391,10 +391,10 @@ function SummaryBody({
   const isPlayer = entity === 'player'
   return (
     <div className={dim ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-      <p className="mb-3 text-sm text-slate-500">{subtitle}</p>
+      <p className="mb-3 text-sm text-muted">{subtitle}</p>
 
       {s.games === 0 ? (
-        <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-4 text-slate-400">
+        <p className="rounded-md border border-line bg-card px-3 py-4 text-muted">
           No games in this scope.
         </p>
       ) : (
@@ -443,7 +443,7 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
-        <tr className="border-b border-slate-800 text-left text-slate-500">
+        <tr className="border-b border-line text-left text-muted">
           <th className="py-2 pr-3 font-normal">Date</th>
           <th className="w-8 py-2 pr-3 font-normal" />
           <th className="py-2 pr-3 font-normal">Opponent</th>
@@ -456,35 +456,35 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i} className="border-b border-slate-900 hover:bg-slate-900/40">
-            <td className="py-1.5 pr-3 text-slate-400">
+          <tr key={i} className="border-b border-line-soft hover:bg-sunken">
+            <td className="py-1.5 pr-3 text-muted">
               {new Date(r.date).toLocaleDateString('en-GB')}
             </td>
             <td className="py-1.5 pr-3">
               <ResultChip result={r.result} />
             </td>
-            <td className="py-1.5 pr-3 text-slate-200">
+            <td className="py-1.5 pr-3 text-ink">
               <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
             </td>
-            <td className="py-1.5 pr-3 text-slate-500">
+            <td className="py-1.5 pr-3 text-muted">
               {r.is_home ? 'H' : 'A'}
             </td>
             {isPlayer && (
-              <td className="py-1.5 pr-3 text-right text-slate-400">
+              <td className="py-1.5 pr-3 text-right text-muted">
                 {fmt(r.minutes, 0)}
               </td>
             )}
             <td className="w-24 py-1.5 pr-3">
               <ValueBar fraction={barFraction(r.value, max)} />
             </td>
-            <td className="w-14 py-1.5 pr-3 text-right font-medium text-slate-100">
+            <td className="w-14 py-1.5 pr-3 text-right font-medium text-ink">
               {fmt(r.value)}
             </td>
           </tr>
         ))}
       </tbody>
       <tfoot>
-        <tr className="text-slate-300">
+        <tr className="text-ink-2">
           <td className="py-2 pr-3 font-medium" colSpan={isPlayer ? 6 : 5}>
             Total ({s.games} games)
           </td>

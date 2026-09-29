@@ -128,11 +128,11 @@ export default function FixtureView() {
 
   if (error)
     return (
-      <div className="rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
+      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
         {error}
       </div>
     )
-  if (!data) return <p className="text-slate-500">Loading…</p>
+  if (!data) return <p className="text-muted">Loading…</p>
 
   const homeRows = byVenue(data.home, venueHome)
   const awayRows = byVenue(data.away, venueAway)
@@ -142,12 +142,12 @@ export default function FixtureView() {
 
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-      <h1 className="mb-1 text-2xl font-semibold text-slate-100">
+      <h1 className="mb-1 text-2xl font-semibold text-ink">
         <EntityLink to={teamHref(data.home_id)}>{data.home_name}</EntityLink>{' '}
-        <span className="text-slate-500">vs</span>{' '}
+        <span className="text-muted">vs</span>{' '}
         <EntityLink to={teamHref(data.away_id)}>{data.away_name}</EntityLink>
       </h1>
-      <p className="mb-4 text-sm text-slate-500">
+      <p className="mb-4 text-sm text-muted">
         {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
         H2H: all meetings, every competition
       </p>
@@ -251,7 +251,7 @@ function FormMode({
       {/* Comparison table */}
       <table className="mb-6 w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-slate-800 text-slate-500">
+          <tr className="border-b border-line text-muted">
             <th className="py-2 text-left font-normal">Metric</th>
             <th className="py-2 text-right font-normal">{data.home_name}</th>
             <th className="py-2 text-right font-normal">{data.away_name}</th>
@@ -259,10 +259,10 @@ function FormMode({
         </thead>
         <tbody>
           {METRICS.map((m) => (
-            <tr key={m.label} className="border-b border-slate-900">
-              <td className="py-1.5 text-slate-300">{m.label}</td>
-              <td className="py-1.5 text-right font-medium text-slate-100">{aggLabel(homeRows, m)}</td>
-              <td className="py-1.5 text-right font-medium text-slate-100">{aggLabel(awayRows, m)}</td>
+            <tr key={m.label} className="border-b border-line-soft">
+              <td className="py-1.5 text-ink-2">{m.label}</td>
+              <td className="py-1.5 text-right font-medium text-ink">{aggLabel(homeRows, m)}</td>
+              <td className="py-1.5 text-right font-medium text-ink">{aggLabel(awayRows, m)}</td>
             </tr>
           ))}
         </tbody>
@@ -308,7 +308,7 @@ function H2HMode({
 }) {
   if (data.h2h.length === 0)
     return (
-      <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-4 text-slate-400">
+      <p className="rounded-md border border-line bg-card px-3 py-4 text-muted">
         No meetings on record between {data.home_name} and {data.away_name} in the covered seasons.
       </p>
     )
@@ -349,7 +349,7 @@ function H2HMode({
       {/* Aggregate over meetings */}
       <table className="mb-6 w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-slate-800 text-slate-500">
+          <tr className="border-b border-line text-muted">
             <th className="py-2 text-left font-normal">Over {meetings.length} meetings</th>
             <th className="py-2 text-right font-normal">{data.home_name}</th>
             <th className="py-2 text-right font-normal">{data.away_name}</th>
@@ -357,17 +357,17 @@ function H2HMode({
         </thead>
         <tbody>
           {METRICS.map((m) => (
-            <tr key={m.label} className="border-b border-slate-900">
-              <td className="py-1.5 text-slate-300">{m.label}</td>
-              <td className="py-1.5 text-right font-medium text-slate-100">{aggLabel(aMeetingRows, m)}</td>
-              <td className="py-1.5 text-right font-medium text-slate-100">{aggLabel(bMeetingRows, m)}</td>
+            <tr key={m.label} className="border-b border-line-soft">
+              <td className="py-1.5 text-ink-2">{m.label}</td>
+              <td className="py-1.5 text-right font-medium text-ink">{aggLabel(aMeetingRows, m)}</td>
+              <td className="py-1.5 text-right font-medium text-ink">{aggLabel(bMeetingRows, m)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <h3 className="mb-2 text-sm text-slate-500">Meetings</h3>
-      <div className="divide-y divide-slate-900">
+      <h3 className="mb-2 text-sm text-muted">Meetings</h3>
+      <div className="divide-y divide-line-soft">
         {meetings.map((m) => (
           <MeetingRow key={m.fixture_id} m={m} />
         ))}
@@ -384,15 +384,15 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 py-2 text-left hover:bg-slate-900/40"
+        className="flex w-full items-center gap-3 py-2 text-left hover:bg-sunken"
       >
-        <span className="w-24 shrink-0 text-xs text-slate-500">{date(m.date)}</span>
-        <span className="w-28 shrink-0 text-xs text-slate-600">{m.competition}</span>
-        <span className="flex-1 text-right text-slate-200">{hostName}</span>
-        <span className="rounded bg-slate-800 px-2 py-0.5 font-semibold text-slate-100">
+        <span className="w-24 shrink-0 text-xs text-muted">{date(m.date)}</span>
+        <span className="w-28 shrink-0 text-xs text-faint">{m.competition}</span>
+        <span className="flex-1 text-right text-ink">{hostName}</span>
+        <span className="rounded bg-ink px-2 py-0.5 font-semibold tabular-nums text-card">
           {m.host.gf}–{m.host.ga}
         </span>
-        <span className="flex-1 text-slate-200">{guestName}</span>
+        <span className="flex-1 text-ink">{guestName}</span>
       </button>
       {open && <DrillDown fixtureId={m.fixture_id} />}
     </div>
@@ -414,20 +414,20 @@ function FixtureList({
   const seasonSpan = new Set(rows.map((r) => r.season)).size
   return (
     <div>
-      <h3 className="mb-2 text-sm text-slate-500">
+      <h3 className="mb-2 text-sm text-muted">
         {title}
         {seasonSpan > 1 && (
-          <span className="ml-2 text-xs text-slate-600">spans {seasonSpan} seasons</span>
+          <span className="ml-2 text-xs text-faint">spans {seasonSpan} seasons</span>
         )}
       </h3>
       {rows.length === 0 ? (
-        <p className="text-slate-600">
+        <p className="text-faint">
           {scopeEmpty
             ? 'No games in this competition scope.'
             : 'No games in this venue filter.'}
         </p>
       ) : (
-        <div className="divide-y divide-slate-900">
+        <div className="divide-y divide-line-soft">
           {rows.map((r) => (
             <FixtureRowItem key={r.fixture_id} r={r} showComp={showComp} />
           ))}
@@ -443,18 +443,18 @@ function FixtureRowItem({ r, showComp }: { r: FixtureRow; showComp?: boolean }) 
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 py-2 text-left text-sm hover:bg-slate-900/40"
+        className="flex w-full items-center gap-2 py-2 text-left text-sm hover:bg-sunken"
       >
-        <span className="w-20 shrink-0 text-xs text-slate-500">{date(r.date)}</span>
+        <span className="w-20 shrink-0 text-xs text-muted">{date(r.date)}</span>
         <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-xs font-bold ${resultClass(r.result)}`}>
           {r.result}
         </span>
-        <span className="w-5 shrink-0 text-xs text-slate-600">{r.is_home ? 'H' : 'A'}</span>
-        <span className="flex-1 truncate text-slate-200">{r.opponent}</span>
+        <span className="w-5 shrink-0 text-xs text-faint">{r.is_home ? 'H' : 'A'}</span>
+        <span className="flex-1 truncate text-ink">{r.opponent}</span>
         {showComp && (
-          <span className="max-w-28 shrink-0 truncate text-xs text-slate-600">{r.competition}</span>
+          <span className="max-w-28 shrink-0 truncate text-xs text-faint">{r.competition}</span>
         )}
-        <span className="font-medium text-slate-100">{r.gf}–{r.ga}</span>
+        <span className="font-medium text-ink">{r.gf}–{r.ga}</span>
       </button>
       {open && <DrillDown fixtureId={r.fixture_id} />}
     </div>
@@ -475,8 +475,8 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
     }
   }, [fixtureId])
 
-  if (err) return <p className="px-3 py-2 text-xs text-rose-400">{err}</p>
-  if (!rows) return <p className="px-3 py-2 text-xs text-slate-500">Loading…</p>
+  if (err) return <p className="px-3 py-2 text-xs text-rose-700">{err}</p>
+  if (!rows) return <p className="px-3 py-2 text-xs text-muted">Loading…</p>
   const host = rows.find((r) => r.is_home) ?? rows[0]
   const guest = rows.find((r) => !r.is_home) ?? rows[1]
   const lines: Array<[string, number | string | null, number | string | null]> = [
@@ -489,16 +489,16 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
     ['Reds', host.reds, guest.reds],
   ]
   return (
-    <div className="mb-2 ml-4 rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm">
-      <div className="mb-1 flex justify-between text-xs text-slate-400">
+    <div className="mb-2 ml-4 rounded-md border border-line bg-sunken p-3 text-sm">
+      <div className="mb-1 flex justify-between text-xs text-muted">
         <span>{guest.opponent}</span>
         <span>{host.opponent}</span>
       </div>
       {lines.map(([label, h, g]) => (
-        <div key={label} className="flex items-center justify-between border-t border-slate-800/60 py-1">
-          <span className="w-10 text-right font-medium text-slate-100">{h ?? '—'}</span>
-          <span className="text-xs text-slate-500">{label}</span>
-          <span className="w-10 font-medium text-slate-100">{g ?? '—'}</span>
+        <div key={label} className="flex items-center justify-between border-t border-line py-1">
+          <span className="w-10 text-right font-medium text-ink">{h ?? '—'}</span>
+          <span className="text-xs text-muted">{label}</span>
+          <span className="w-10 font-medium text-ink">{g ?? '—'}</span>
         </div>
       ))}
     </div>
@@ -507,10 +507,10 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
 
 function VenuePanel({ name, value, onChange, count }: { name: string; value: Venue; onChange: (v: Venue) => void; count: number }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+    <div className="rounded-lg border border-line bg-card p-3">
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="font-medium text-slate-200">{name}</span>
-        <span className="text-xs text-slate-500">{count} games</span>
+        <span className="font-medium text-ink">{name}</span>
+        <span className="text-xs text-muted">{count} games</span>
       </div>
       <Toggle
         value={value}
@@ -529,9 +529,9 @@ function VenuePanel({ name, value, onChange, count }: { name: string; value: Ven
 
 function Record({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'slate' | 'rose' }) {
   const tones = {
-    emerald: 'border-emerald-800 bg-emerald-950/40 text-emerald-300',
-    slate: 'border-slate-700 bg-slate-900/40 text-slate-300',
-    rose: 'border-rose-800 bg-rose-950/40 text-rose-300',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    slate: 'border-line bg-card text-ink-2',
+    rose: 'border-rose-200 bg-rose-50 text-rose-800',
   }
   return (
     <div className={`rounded-lg border px-4 py-2 text-center ${tones[tone]}`}>

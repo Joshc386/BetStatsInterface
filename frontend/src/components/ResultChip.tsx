@@ -1,9 +1,9 @@
 /** The W/D/L badge. One definition so a match reads the same everywhere —
  * the fixture form lists and the team/player breakdown tables. */
 export const resultClass = (r: string | null | undefined) =>
-  r === 'W' ? 'bg-emerald-900/60 text-emerald-300'
-    : r === 'L' ? 'bg-rose-900/60 text-rose-300'
-      : 'bg-slate-700/60 text-slate-300'
+  r === 'W' ? 'bg-emerald-100 text-emerald-800'
+    : r === 'L' ? 'bg-rose-100 text-rose-800'
+      : 'bg-stone-200 text-stone-700'
 
 export function ResultChip({ result }: { result: string | null | undefined }) {
   // No team row for this appearance -> hold the column's width, print nothing.
@@ -28,9 +28,9 @@ export function barFraction(value: number | null | undefined, max: number) {
  * glance instead of making you read every cell. */
 export function ValueBar({ fraction }: { fraction: number }) {
   return (
-    <span className="block h-1 w-full overflow-hidden rounded-full bg-slate-800">
+    <span className="block h-1 w-full overflow-hidden rounded-full bg-line-soft">
       <span
-        className="block h-full rounded-full bg-sky-700"
+        className="block h-full rounded-full bg-accent-ink"
         style={{ width: `${fraction * 100}%` }}
       />
     </span>

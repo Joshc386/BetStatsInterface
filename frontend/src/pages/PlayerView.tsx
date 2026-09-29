@@ -156,10 +156,10 @@ export default function PlayerView() {
   return (
     <div>
       <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold text-slate-100">
+        <h1 className="text-2xl font-semibold text-ink">
           {summary?.entity_name ?? (loading ? '…' : `#${playerId}`)}
         </h1>
-        <span className="text-sm text-slate-500">player</span>
+        <span className="text-sm text-muted">player</span>
       </div>
 
       {/* active drill-in filters */}
@@ -258,14 +258,14 @@ export default function PlayerView() {
       </ControlBar>
 
       {(error || catError) && (
-        <div className="mb-4 rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
+        <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {error ?? catError}
         </div>
       )}
 
       {summary && (
         <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-          <p className="mb-3 text-sm text-slate-500">
+          <p className="mb-3 text-sm text-muted">
             {windowLabel} · {scopeName}
             {venue !== 'all' ? ` · ${venue === 'home' ? 'Home' : 'Away'}` : ''}
             {teamFilter ? ` · ${teamFilter.name}` : ''}
@@ -274,7 +274,7 @@ export default function PlayerView() {
           </p>
 
           {summary.games === 0 ? (
-            <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-4 text-slate-400">
+            <p className="rounded-md border border-line bg-card px-3 py-4 text-muted">
               No appearances in this scope.
             </p>
           ) : (
@@ -328,7 +328,7 @@ export default function PlayerView() {
           )}
         </div>
       )}
-      {loading && !summary && <p className="text-slate-500">Loading…</p>}
+      {loading && !summary && <p className="text-muted">Loading…</p>}
     </div>
   )
 }
@@ -344,16 +344,16 @@ function GroupedBreakdown({
   return (
     <div className="space-y-4">
       {groups.map((g) => (
-        <div key={g.key} className="overflow-hidden rounded-lg border border-slate-800">
+        <div key={g.key} className="overflow-hidden rounded-lg border border-line">
           <button
             onClick={() => onPick(g)}
             title={`Filter to ${g.label}`}
-            className="flex w-full items-center justify-between bg-slate-900/70 px-3 py-2 text-left hover:bg-slate-800"
+            className="flex w-full items-center justify-between bg-sunken px-3 py-2 text-left hover:bg-line-soft"
           >
-            <span className="font-medium text-slate-100">{g.label}</span>
-            <span className="text-sm text-slate-400">
-              {label(metric)} <span className="font-semibold text-slate-200">{fmt(g.total)}</span> · {g.games} {g.games === 1 ? 'app' : 'apps'}
-              <span className="ml-2 text-xs text-sky-400">filter ↓</span>
+            <span className="font-medium text-ink">{g.label}</span>
+            <span className="text-sm text-muted">
+              {label(metric)} <span className="font-semibold text-ink">{fmt(g.total)}</span> · {g.games} {g.games === 1 ? 'app' : 'apps'}
+              <span className="ml-2 text-xs text-accent-ink">filter ↓</span>
             </span>
           </button>
           <FlatBreakdown rows={g.rows} alreadyOrdered showComp={segment === 'team'} />
@@ -377,21 +377,21 @@ function FlatBreakdown({
     <table className="w-full border-collapse text-sm">
       <tbody>
         {ordered.map((r, i) => (
-          <tr key={i} className="border-b border-slate-900 last:border-0 hover:bg-slate-900/40">
-            <td className="py-1.5 pl-3 pr-3 text-slate-400">{date(r.date)}</td>
+          <tr key={i} className="border-b border-line-soft last:border-0 hover:bg-sunken">
+            <td className="py-1.5 pl-3 pr-3 text-muted">{date(r.date)}</td>
             <td className="py-1.5 pr-3">
               <ResultChip result={r.result} />
             </td>
-            <td className="py-1.5 pr-3 text-slate-200">
+            <td className="py-1.5 pr-3 text-ink">
               <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>
             </td>
-            <td className="py-1.5 pr-3 text-slate-500">{r.is_home ? 'H' : 'A'}</td>
-            {showComp && <td className="py-1.5 pr-3 text-xs text-slate-600">{r.competition ?? ''}</td>}
-            <td className="py-1.5 pr-3 text-right text-slate-400">{fmt(r.minutes, 0)}′</td>
+            <td className="py-1.5 pr-3 text-muted">{r.is_home ? 'H' : 'A'}</td>
+            {showComp && <td className="py-1.5 pr-3 text-xs text-faint">{r.competition ?? ''}</td>}
+            <td className="py-1.5 pr-3 text-right text-muted">{fmt(r.minutes, 0)}′</td>
             <td className="w-20 py-1.5 pr-3">
               <ValueBar fraction={barFraction(r.value, max)} />
             </td>
-            <td className="w-12 py-1.5 pr-3 text-right font-medium text-slate-100">{fmt(r.value)}</td>
+            <td className="w-12 py-1.5 pr-3 text-right font-medium text-ink">{fmt(r.value)}</td>
           </tr>
         ))}
       </tbody>
@@ -401,9 +401,9 @@ function FlatBreakdown({
 
 function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-sky-800 bg-sky-950/50 px-3 py-1 text-sm text-sky-200">
+    <span className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-sm text-accent-ink">
       {label}
-      <button onClick={onClear} className="text-sky-400 hover:text-sky-200" title="clear filter">✕</button>
+      <button onClick={onClear} className="text-accent-ink hover:text-ink" title="clear filter">✕</button>
     </span>
   )
 }
