@@ -95,3 +95,13 @@ requests per competition where the range was 1 — ~25 per run instead of 7.
 
 If ESPN drops the month form too, the failure is the same loud one: `upcoming`
 exits 1 and the digest reports it.
+
+**Same day — rescheduled matches are followed by event id.** With the fetch fixed, the
+stalled backstop still fired on two League One matches from 26/09. ESPN had not lost
+them: it had **rescheduled** them (Stevenage v Sheffield Weds → 24/11, Doncaster v
+Oxford → 15/12), keeping each event id but moving the date past the 45-day forward
+window, where no scoreboard read can see it. The range fetch had the same blind spot.
+Now each fixture that would be reported stalled, and that carries an `espn_event_id`,
+is looked up directly (`summary?event=<id>`, one request each, none on a healthy run)
+and moved to ESPN's current date, provided the move stays inside its season (the
+season is part of the natural key). Whatever ESPN has not moved still alarms.

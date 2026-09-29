@@ -28,11 +28,14 @@ from ingestion.upcoming import (
     EUROPEAN_ESPN_SLUGS,
     european_pending_events,
     fetch_scoreboard,
+    follow_rescheduled,
     postponed_pairs,
     scoreboard_months,
     scoreboard_window,
     select_cup_events,
     stalled,
+    stalled_fixtures,
+    summary_kickoff,
     takes_finished,
     upsert_event,
 )
@@ -725,3 +728,100 @@ def test_fetch_asks_month_by_month_and_returns_exactly_the_window(monkeypatch):
     assert all("/eng.3/scoreboard" in u for u in urls)
     # outside the window (a: before, d: after) dropped; b seen twice, kept once
     assert [e["id"] for e in payload["events"]] == ["b", "c"]
+
+
+UTC = dt.timezone.utc
+
+
+def _summary(date: str) -> dict:
+    """The part of ESPN's per-event summary we read (shape of summary?event=…)."""
+    return {"header": {"competitions": [
+        {"date": date, "status": {"type": {"name": "STATUS_SCHEDULED"}}}
+    ]}}
+
+
+def test_summary_kickoff_reads_the_events_current_date():
+    assert summary_kickoff(_summary("2026-11-24T19:45Z")) == dt.datetime(
+        2026, 11, 24, 19, 45, tzinfo=UTC
+    )
+    assert summary_kickoff({}) is None
+
+
+def _stalled_fixture(session, event_id: str | None):
+    comp = session.scalar(select(Competition).where(Competition.name == "League One"))
+    home, away = session.scalars(select(Team).where(Team.espn_id.is_not(None)).limit(2)).all()
+    upsert_event(
+        session, comp, home.id, away.id,
+        dt.datetime(2099, 2, 20, 15, 0, tzinfo=UTC), espn_event_id=event_id,
+    )
+    fixture = session.scalar(
+        select(Fixture).where(
+            Fixture.competition_id == comp.id, Fixture.season == "9899",
+            Fixture.home_team_id == home.id, Fixture.away_team_id == away.id,
+        )
+    )
+    return comp, home, away, fixture
+
+
+NOW = dt.datetime(2099, 3, 1, 12, 0, tzinfo=UTC)
+
+
+def test_a_stalled_fixture_espn_rescheduled_moves_to_its_new_date(monkeypatch):
+    """ESPN keeps a rescheduled match's event id but moves its date -- often past
+    the forward window, where no scoreboard read can see it. Stevenage v
+    Sheffield Weds (26/09 -> 24/11/2026) read as 'stalled' for exactly that
+    reason. Looking the event up by id moves the fixture instead of alarming."""
+    asked: list[str] = []
+
+    def fake_espn_json(url: str, **_kw) -> dict:
+        asked.append(url)
+        return _summary("2099-04-10T19:45Z")
+
+    monkeypatch.setattr("ingestion.upcoming.espn_json", fake_espn_json)
+    with SessionLocal() as session:
+        comp, home, away, fixture = _stalled_fixture(session, "999000001")
+
+        moved = follow_rescheduled(session, comp, "eng.3", "9899", set(), now=NOW)
+
+        assert len(asked) == 1
+        assert "/eng.3/summary?event=999000001" in asked[0]
+        assert fixture.date == dt.datetime(2099, 4, 10, 19, 45, tzinfo=UTC)
+        assert fixture.status == "scheduled"
+        assert moved == [
+            f"2099-02-20 {home.canonical_name} v {away.canonical_name} -> 2099-04-10"
+        ]
+        late = stalled_fixtures(session, comp, "9899", set(), now=NOW)
+        assert not any(home.canonical_name in line for line in late)
+        session.rollback()
+
+
+@pytest.mark.parametrize(
+    "event_id, espn_date, excused",
+    [
+        (None, None, False),  # no event id: nothing to look up
+        ("999000002", "2099-02-20T15:00Z", False),  # ESPN has not moved it
+        ("999000003", "2099-08-10T19:45Z", False),  # moved into another season
+        ("999000004", None, True),  # already excused as called off
+    ],
+)
+def test_follow_rescheduled_leaves_alone_what_it_cannot_honestly_move(
+    monkeypatch, event_id, espn_date, excused
+):
+    """Anything ESPN has not moved stays put, so it still alarms. A move across
+    the season boundary is refused: the season is part of the natural key."""
+    asked: list[str] = []
+
+    def fake_espn_json(url: str, **_kw) -> dict:
+        asked.append(url)
+        return _summary(espn_date)
+
+    monkeypatch.setattr("ingestion.upcoming.espn_json", fake_espn_json)
+    with SessionLocal() as session:
+        comp, home, away, fixture = _stalled_fixture(session, event_id)
+        postponed = {(home.espn_id, away.espn_id)} if excused else set()
+
+        assert follow_rescheduled(session, comp, "eng.3", "9899", postponed, now=NOW) == []
+        assert fixture.date == dt.datetime(2099, 2, 20, 15, 0, tzinfo=UTC)
+        if event_id is None or excused:
+            assert asked == []  # no request when there is nothing to ask
+        session.rollback()

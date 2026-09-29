@@ -185,6 +185,12 @@ _SCOREBOARD_URL = (
     "?dates={month:%Y%m}&limit=400"
 )
 
+# One event by id, wherever ESPN has moved it — see follow_rescheduled.
+_SUMMARY_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/summary"
+    "?event={event_id}"
+)
+
 
 class UnknownEspnTeamError(Exception):
     """An ESPN team matched no stored espn_id, canonical/fdcouk name, or alias."""
@@ -609,6 +615,61 @@ def stalled_fixtures(
     ]
 
 
+def summary_kickoff(summary: dict) -> dt.datetime | None:
+    """The kick-off ESPN currently holds for one event (its summary document)."""
+    competitions = summary.get("header", {}).get("competitions") or [{}]
+    raw = competitions[0].get("date")
+    return _event_date(raw) if raw else None
+
+
+def follow_rescheduled(
+    session: Session,
+    competition: Competition,
+    slug: str,
+    season: str,
+    postponed: set[tuple[str, str]],
+    *,
+    now: dt.datetime,
+) -> list[str]:
+    """Move stalled fixtures that ESPN has rescheduled to their new date.
+
+    ESPN keeps a rescheduled match's event id and moves its date — often beyond
+    the forward window, where no scoreboard read can see it — so our row kept
+    the old date and read as stalled for weeks (Stevenage v Sheffield Weds,
+    26/09 -> 24/11/2026). Each fixture `stalled` would report, and that carries
+    an event id, is looked up directly: one request per such fixture, none on a
+    healthy run. A move is refused across a season boundary, since the season
+    is part of the natural key. Whatever ESPN has not moved stays stalled and
+    still alarms. Returns one line per fixture moved.
+    """
+    home, away = aliased(Team), aliased(Team)
+    rows = session.execute(
+        select(Fixture, home.espn_id, away.espn_id, home.canonical_name, away.canonical_name)
+        .join(home, home.id == Fixture.home_team_id)
+        .join(away, away.id == Fixture.away_team_id)
+        .where(
+            Fixture.competition_id == competition.id,
+            Fixture.season == season,
+            Fixture.status == "scheduled",
+            Fixture.date < now,
+            Fixture.espn_event_id.is_not(None),
+        )
+    ).all()
+    by_pair = {(h, a): (fixture, hn, an) for fixture, h, a, hn, an in rows}
+    late = stalled([(h, a, f.date) for (h, a), (f, _, _) in by_pair.items()], postponed, now=now)
+    moved = []
+    for h, a, _ in late:
+        fixture, home_name, away_name = by_pair[(h, a)]
+        url = _SUMMARY_URL.format(slug=slug, event_id=fixture.espn_event_id)
+        kickoff = summary_kickoff(espn_json(url))
+        if kickoff is None or kickoff == fixture.date or season_for(kickoff) != fixture.season:
+            continue
+        moved.append(f"{fixture.date:%Y-%m-%d} {home_name} v {away_name} -> {kickoff:%Y-%m-%d}")
+        fixture.date = kickoff
+    session.flush()
+    return moved
+
+
 def ingest_upcoming(days: int = 45, *, log=print) -> dict:
     """Fetch + upsert the forward window for every configured league.
 
@@ -718,9 +779,13 @@ def ingest_upcoming(days: int = 45, *, log=print) -> dict:
             # internationals, whose past scheduled rows are placeholders the
             # purge above deliberately deletes rather than marks.
             if finished_too:
-                late = stalled_fixtures(
-                    session, competition, season, postponed_pairs(payload), now=now
-                )
+                postponed = postponed_pairs(payload)
+                for line in follow_rescheduled(
+                    session, competition, slug, season, postponed, now=now
+                ):
+                    log(f"  {comp_name}: rescheduled by ESPN, moved {line}")
+                session.commit()
+                late = stalled_fixtures(session, competition, season, postponed, now=now)
                 if late:
                     stalled_all[comp_name] = late
                     log(
