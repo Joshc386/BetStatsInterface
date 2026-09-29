@@ -13,7 +13,7 @@ import type { ReactNode } from 'react'
 
 /** One input/select. */
 export const ctrl =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
+  'rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink outline-none focus:border-accent-ink'
 
 /** The filter toolbar. Deliberately has no card fill — it used to share the
  * exact surface of the stat tiles, so eight filters carried the same visual
@@ -21,7 +21,7 @@ export const ctrl =
  * bound it. */
 export function ControlBar({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end gap-x-5 gap-y-3 border-b border-slate-800/80 pb-4">
+    <div className="mb-6 flex flex-wrap items-end gap-x-5 gap-y-3 border-b border-line pb-4">
       {children}
     </div>
   )
@@ -32,7 +32,7 @@ export function ControlBar({ children }: { children: ReactNode }) {
  * dividers wrong. */
 export function ControlGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 border-slate-800 pl-5 first:border-0 first:pl-0 sm:border-l">
+    <div className="flex flex-wrap items-end gap-3 border-line pl-5 first:border-0 first:pl-0 sm:border-l">
       {children}
     </div>
   )
@@ -41,7 +41,7 @@ export function ControlGroup({ children }: { children: ReactNode }) {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-xs text-muted">{label}</span>
       {children}
     </label>
   )
@@ -55,13 +55,13 @@ export function Toggle({
   options: Array<[string, string]>
 }) {
   return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
+    <div className="inline-flex overflow-hidden rounded-md border border-line">
       {options.map(([v, text]) => (
         <button
           key={v}
           onClick={() => onChange(v)}
           className={`px-3 py-1.5 text-sm ${
-            value === v ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+            value === v ? 'bg-accent text-on-accent' : 'bg-card text-ink-2 hover:bg-sunken'
           }`}
         >
           {text}
@@ -105,10 +105,10 @@ export function Stat({
   note?: string
 }) {
   return (
-    <div className="min-w-28 rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums text-slate-100">{value}</div>
-      {note && <div className="mt-0.5 text-[11px] text-amber-500/80">{note}</div>}
+    <div className="min-w-28 rounded-lg border border-line bg-card px-4 py-3 shadow-sm">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="text-2xl font-semibold tabular-nums text-ink">{value}</div>
+      {note && <div className="mt-0.5 text-[11px] text-amber-700">{note}</div>}
     </div>
   )
 }
@@ -132,14 +132,14 @@ export function HitRate({
   showThreshold: boolean
 }) {
   return (
-    <div className="mb-5 inline-flex items-center gap-4 rounded-xl border border-sky-800/70 bg-sky-950/40 px-5 py-3">
-      <div className="text-3xl font-semibold tabular-nums text-sky-200">{pct}%</div>
+    <div className="mb-5 inline-flex items-center gap-4 rounded-xl border border-accent/30 bg-accent/10 px-5 py-3">
+      <div className="text-3xl font-semibold tabular-nums text-accent-ink">{pct}%</div>
       <div className="text-sm leading-tight">
-        <div className="text-slate-100">
+        <div className="text-ink">
           {metricLabel} {direction}
           {showThreshold && ` ${threshold}`}
         </div>
-        <div className="text-sky-400/90">
+        <div className="text-accent-ink">
           {hits} of {n} games
         </div>
       </div>

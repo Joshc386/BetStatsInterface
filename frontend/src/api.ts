@@ -53,6 +53,10 @@ export interface Summary {
   entity: Entity
   entity_id: number
   entity_name: string | null
+  // players only: the club of his latest club appearance, whatever the filters
+  // — it themes the player page (lib/teamTheme.ts)
+  current_team_id?: number | null
+  current_team?: string | null
   metric: string
   scope: string
   window: string

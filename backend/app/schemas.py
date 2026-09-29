@@ -37,6 +37,9 @@ class Summary(BaseModel):
     entity: str  # "team" | "player"
     entity_id: int
     entity_name: str | None
+    # players only: the club of the latest club appearance, whatever the filters
+    current_team_id: int | None = None
+    current_team: str | None = None
     metric: str
     scope: str
     window: str

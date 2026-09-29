@@ -16,7 +16,7 @@ export function EntityLink({
   return (
     <Link
       to={to}
-      className={`rounded-sm underline-offset-2 hover:text-sky-300 hover:underline focus-visible:outline-1 focus-visible:outline-sky-500 ${className}`}
+      className={`rounded-sm underline-offset-2 hover:text-accent-ink hover:underline focus-visible:outline-1 focus-visible:outline-accent-ink ${className}`}
     >
       {children}
     </Link>

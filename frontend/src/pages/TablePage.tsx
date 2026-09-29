@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Competition, type TableRow } from '../api'
+import { KitShirt } from '../components/Kit'
+import { kitOf } from '../lib/teamTheme'
 
 // Computed league table (ADR 0010) — standings derived from our own team_match
 // rows; points deductions applied and footnoted, never fetched from a provider.
@@ -47,16 +49,16 @@ export default function TablePage() {
     [rows],
   )
 
-  if (error) return <p className="text-sm text-rose-400">{error}</p>
+  if (error) return <p className="text-sm text-rose-700">{error}</p>
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold text-slate-100">League table</h1>
+        <h1 className="text-xl font-semibold text-ink">League table</h1>
         <select
           value={competitionId ?? ''}
           onChange={(e) => setCompetitionId(Number(e.target.value))}
-          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+          className="rounded border border-line bg-card px-2 py-1 text-sm text-ink"
         >
           {competitions.map((c) => (
             <option key={c.id} value={c.id}>
@@ -67,7 +69,7 @@ export default function TablePage() {
         <select
           value={season}
           onChange={(e) => setSeason(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+          className="rounded border border-line bg-card px-2 py-1 text-sm text-ink"
         >
           {seasons.map((s) => (
             <option key={s} value={s}>
@@ -78,14 +80,14 @@ export default function TablePage() {
       </div>
 
       {rows === null ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-500">No results for this season.</p>
+        <p className="text-sm text-muted">No results for this season.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
+        <div className="overflow-x-auto rounded-lg border border-line bg-card">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+              <tr className="border-b border-line text-left text-xs text-muted">
                 <th className="px-3 py-2 text-right">#</th>
                 <th className="px-3 py-2">Team</th>
                 <th className="px-3 py-2 text-right">P</th>
@@ -98,38 +100,39 @@ export default function TablePage() {
                 <th className="px-3 py-2 text-right">Pts</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-900">
+            <tbody className="divide-y divide-line-soft">
               {rows.map((r) => (
-                <tr key={r.team_id} className="hover:bg-slate-900/60">
-                  <td className="px-3 py-1.5 text-right text-slate-500">
+                <tr key={r.team_id} className="hover:bg-sunken">
+                  <td className="px-3 py-1.5 text-right text-muted">
                     {r.position}
                   </td>
                   <td className="px-3 py-1.5">
+                    <KitShirt kit={kitOf(r.team_id)} className="-mt-0.5 mr-2 inline h-4 w-4" />
                     <Link
                       to={`/team/${r.team_id}`}
-                      className="text-slate-200 hover:underline"
+                      className="text-ink hover:underline"
                     >
                       {r.team_name}
                     </Link>
                     {r.adjustment !== 0 && (
                       <span
                         title={r.adjustment_note ?? undefined}
-                        className="ml-1 cursor-help text-rose-400"
+                        className="ml-1 cursor-help text-rose-700"
                       >
                         *
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.played}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.won}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.drawn}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.lost}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.gf}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">{r.ga}</td>
-                  <td className="px-3 py-1.5 text-right text-slate-400">
+                  <td className="px-3 py-1.5 text-right text-muted">{r.played}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">{r.won}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">{r.drawn}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">{r.lost}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">{r.gf}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">{r.ga}</td>
+                  <td className="px-3 py-1.5 text-right text-muted">
                     {r.gd > 0 ? `+${r.gd}` : r.gd}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-medium text-slate-100">
+                  <td className="px-3 py-1.5 text-right font-medium text-ink">
                     {r.points}
                   </td>
                 </tr>
@@ -140,10 +143,10 @@ export default function TablePage() {
       )}
 
       {deductions.length > 0 && (
-        <div className="mt-3 space-y-1 text-xs text-slate-500">
+        <div className="mt-3 space-y-1 text-xs text-muted">
           {deductions.map((r) => (
             <p key={r.team_id}>
-              <span className="text-rose-400">*</span> {r.team_name}{' '}
+              <span className="text-rose-700">*</span> {r.team_name}{' '}
               {r.adjustment}: {r.adjustment_note}
             </p>
           ))}

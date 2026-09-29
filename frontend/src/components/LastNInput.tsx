@@ -5,7 +5,7 @@
 import { useState } from 'react'
 
 const cls =
-  'w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-600'
+  'w-20 rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink outline-none focus:border-accent-ink'
 
 /** Parse the raw text into a usable window size. Blank / non-numeric / < 1 all
  * fall back to 5; anything above max is clamped to max. */

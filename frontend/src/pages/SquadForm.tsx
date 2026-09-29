@@ -17,6 +17,8 @@ import { ControlBar, ControlGroup, Field, Toggle, ctrl } from '../components/con
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { compareByFigure, membershipLabel } from '../lib/squadMembership'
 import { LastNInput } from '../components/LastNInput'
+import { KitShirt } from '../components/Kit'
+import { awayTheme, kitOf, teamTheme, themeStyle } from '../lib/teamTheme'
 
 const label = (m: string) =>
   m.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -217,11 +219,11 @@ export function SquadFormPanel({
 
   if (error)
     return (
-      <div className="rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-300">
+      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
         {error}
       </div>
     )
-  if (!data) return <p className="text-slate-500">Loading…</p>
+  if (!data) return <p className="text-muted">Loading…</p>
 
   // Membership is scope-independent, so a club can field a full squad list with
   // nothing in the selected scope — typically a League One/Two club under League,
@@ -236,23 +238,26 @@ export function SquadFormPanel({
   return (
     <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
       <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="font-medium text-slate-200">{data.team_name}</h3>
-        <span className="text-xs text-slate-500">{membership.count}</span>
+        <h3 className="flex items-center gap-2 font-medium text-ink">
+          <KitShirt kit={kitOf(teamId)} />
+          {data.team_name}
+        </h3>
+        <span className="text-xs text-muted">{membership.count}</span>
       </div>
-      <p className="mb-2 text-xs text-slate-600">{membership.caption}</p>
+      <p className="mb-2 text-xs text-faint">{membership.caption}</p>
       {data.members.length === 0 ? (
-        <p className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-500">
+        <p className="rounded-lg border border-line px-3 py-2 text-xs text-muted">
           No appearances on record yet.
         </p>
       ) : emptyInScope ? (
-        <p className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-500">
+        <p className="rounded-lg border border-line px-3 py-2 text-xs text-muted">
           No {scopeLabel} player data for {data.team_name}.{' '}
           {c.scope === 'club_league'
             ? 'Player coverage is Premier League & Championship only — try Cups for their cup-tie appearances.'
             : 'Their appearances are in other scopes.'}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-800">
+        <div className="overflow-hidden rounded-lg border border-line bg-card">
           {computed.map((p) => (
             <PlayerRow key={p.player_id} p={p} metric={c.metric} />
           ))}
@@ -266,20 +271,20 @@ function PlayerRow({ p, metric }: { p: Computed; metric: string }) {
   const [open, setOpen] = useState(false)
   const def = PLAYER_METRICS[metric] ?? PLAYER_METRICS.shots_on_target
   return (
-    <div className="border-b border-slate-900 last:border-0">
+    <div className="border-b border-line-soft last:border-0">
       {/* The name is a link to the player, so the row cannot be one big <button>
         * (an <a> inside a <button> is invalid). Chevron and the figures stay
         * toggles, which keeps both affordances on the row. */}
-      <div className="flex w-full items-center gap-3 px-3 text-left text-sm hover:bg-slate-900/50">
+      <div className="flex w-full items-center gap-3 px-3 text-left text-sm hover:bg-sunken">
         <button
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-label={`${open ? 'Hide' : 'Show'} ${p.player}'s appearances`}
-          className="w-4 shrink-0 py-2 text-xs text-slate-600"
+          className="w-4 shrink-0 py-2 text-xs text-faint"
         >
           {open ? '▾' : '▸'}
         </button>
-        <span className="min-w-0 flex-1 truncate py-2 text-slate-200">
+        <span className="min-w-0 flex-1 truncate py-2 text-ink">
           <EntityLink to={playerHref(p.player_id)}>{p.player}</EntityLink>
         </span>
         <button
@@ -287,9 +292,9 @@ function PlayerRow({ p, metric }: { p: Computed; metric: string }) {
           aria-expanded={open}
           className="flex shrink-0 items-center gap-3 py-2"
         >
-          <span className="w-24 shrink-0 text-right text-xs text-slate-500">{fmtDate(p.last_seen)}</span>
-          <span className="w-14 shrink-0 text-right text-xs text-slate-500">{p.apps} app{p.apps === 1 ? '' : 's'}</span>
-          <span className="w-20 shrink-0 text-right font-semibold text-slate-100">{p.figure}</span>
+          <span className="w-24 shrink-0 text-right text-xs text-muted">{fmtDate(p.last_seen)}</span>
+          <span className="w-14 shrink-0 text-right text-xs text-muted">{p.apps} app{p.apps === 1 ? '' : 's'}</span>
+          <span className="w-20 shrink-0 text-right font-semibold text-ink">{p.figure}</span>
         </button>
       </div>
       {open && (
@@ -321,9 +326,9 @@ function MiniBreakdown({
       : typeof v === 'boolean' ? (v ? '✓' : '·')
       : String(v)
   return (
-    <div className="bg-slate-950/40 px-3 pb-2">
+    <div className="bg-sunken/60 px-3 pb-2">
       {rows.length === 0 ? (
-        <p className="py-2 text-xs text-slate-600">
+        <p className="py-2 text-xs text-faint">
           {neverSeen
             ? 'In the squad; no appearances for this club on record.'
             : 'No appearances in this scope.'}
@@ -332,12 +337,12 @@ function MiniBreakdown({
         <table className="w-full border-collapse text-xs">
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-900/60 last:border-0">
-                <td className="py-1 pr-3 text-slate-500">{fmtDate(r.date)}</td>
-                <td className="py-1 pr-3 text-slate-300">{r.opponent}</td>
-                <td className="py-1 pr-3 text-slate-600">{r.is_home ? 'H' : 'A'}</td>
-                <td className="py-1 pr-3 text-right text-slate-500">{r.minutes ?? '—'}′</td>
-                <td className="py-1 text-right font-medium text-slate-200">{cell(def.get(r))}</td>
+              <tr key={i} className="border-b border-line-soft last:border-0">
+                <td className="py-1 pr-3 text-muted">{fmtDate(r.date)}</td>
+                <td className="py-1 pr-3 text-ink-2">{r.opponent}</td>
+                <td className="py-1 pr-3 text-faint">{r.is_home ? 'H' : 'A'}</td>
+                <td className="py-1 pr-3 text-right text-muted">{r.minutes ?? '—'}′</td>
+                <td className="py-1 text-right font-medium text-ink">{cell(def.get(r))}</td>
               </tr>
             ))}
           </tbody>
@@ -345,7 +350,7 @@ function MiniBreakdown({
       )}
       <Link
         to={`/player/${playerId}`}
-        className="mt-1 inline-block text-xs text-sky-400 hover:text-sky-300"
+        className="mt-1 inline-block text-xs text-accent-ink hover:underline"
       >
         full player view → ({label(metric)} spells, all metrics)
       </Link>
@@ -364,12 +369,18 @@ export function SquadSection({
   metricList: string[]
 }) {
   const state = useSquadControls()
+  // each squad in its side's colours, the away side in its change kit on a clash
+  const home = teamTheme(homeId)
   return (
     <>
       <SquadControls state={state} metricList={metricList} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SquadFormPanel teamId={homeId} state={state} />
-        <SquadFormPanel teamId={awayId} state={state} />
+        <div style={themeStyle(home)}>
+          <SquadFormPanel teamId={homeId} state={state} />
+        </div>
+        <div style={themeStyle(awayTheme(home, awayId))}>
+          <SquadFormPanel teamId={awayId} state={state} />
+        </div>
       </div>
     </>
   )

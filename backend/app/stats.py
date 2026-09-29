@@ -185,10 +185,29 @@ def entity_summary(
 
     name = session.scalar(select(name_model.canonical_name).where(name_model.id == entity_id))
 
+    # The player hub wears his current club's colours: the club of his latest
+    # CLUB appearance, read unfiltered so a Spell or caps filter cannot repaint it.
+    current_team_id = current_team = None
+    if entity == "player":
+        latest = session.execute(
+            select(PlayerMatch.team_id, Team.canonical_name)
+            .join(Team, Team.id == PlayerMatch.team_id)
+            .where(
+                PlayerMatch.player_id == entity_id,
+                PlayerMatch.competition_type != "international",
+            )
+            .order_by(PlayerMatch.date.desc())
+            .limit(1)
+        ).first()
+        if latest is not None:
+            current_team_id, current_team = latest
+
     return {
         "entity": entity,
         "entity_id": entity_id,
         "entity_name": name,
+        "current_team_id": current_team_id,
+        "current_team": current_team,
         "metric": metric,
         "scope": comp_label,
         "window": window,
