@@ -226,9 +226,10 @@ export function SquadFormPanel({
   if (!data) return <p className="text-muted">Loading…</p>
 
   // Membership is scope-independent, so a club can field a full squad list with
-  // nothing in the selected scope — typically a League One/Two club under League,
-  // whose player data is cup-only (coverage is PL + Championship). Say why instead
-  // of listing the whole squad at zero, which reads as broken data.
+  // nothing in the selected scope — typically a club from outside the four
+  // English tiers under League, whose player data comes only from its cup or
+  // European ties against a covered club. Say why instead of listing the whole
+  // squad at zero, which reads as broken data.
   const scopeLabel = SCOPES.find(([v]) => v === c.scope)?.[1] ?? 'this scope'
   const membership = membershipLabel(data.membership, data.members.length)
   const emptyInScope =
@@ -253,7 +254,7 @@ export function SquadFormPanel({
         <p className="rounded-lg border border-line px-3 py-2 text-xs text-muted">
           No {scopeLabel} player data for {data.team_name}.{' '}
           {c.scope === 'club_league'
-            ? 'Player coverage is Premier League & Championship only — try Cups for their cup-tie appearances.'
+            ? 'League player data covers the four English tiers only — try Cups or Europe for their tie appearances.'
             : 'Their appearances are in other scopes.'}
         </p>
       ) : (

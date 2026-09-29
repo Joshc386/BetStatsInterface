@@ -62,3 +62,36 @@ cup ties flow in automatically once drawn (covered-tie filter applies, per ADR 0
   degrades to "no upcoming fixtures" rather than wrong data.
 - Cup upcoming fixtures appear automatically per round once draws are made, filtered to
   covered ties — no new build needed when that happens.
+
+## Update — ESPN dropped date ranges; the scoreboard is read a month at a time (2026-09-29)
+
+The "could change shape" consequence above happened. From **2026-09-16 08:00** every
+scoreboard request carrying a date **range** (`dates=YYYYMMDD-YYYYMMDD`) answered
+**400 `{"message":"Failed to get events endpoint."}`**, on every slug, for any span —
+two days or thirty, with or without `limit`. Single dates, a whole **month**
+(`dates=YYYYMM`) and a year still answered 200 with the same payload shape. The fetch
+was built entirely on the range form, so `upcoming` failed every run for 13 days, and
+the match-day job's European probe (same fetch, errors swallowed as "ESPN unavailable")
+stopped signalling European rounds. League Fixtures played in that time were not
+marked finished by ESPN (ADR 0014), so their FBref player rows waited on football-data.co.uk.
+
+**Decision:** `fetch_scoreboard` requests each calendar month the window touches
+(`dates=YYYYMM&limit=400`), keeps each event once, and drops anything outside the
+window, so every caller sees what the range returned. Measured before choosing:
+busiest months return 56–72 events (well under the default cap of 100, which the
+year form hits), finished events carry status and `season.slug`, cups and European
+slugs behave the same.
+
+**Cost:** the usual window (30 days back, 45 forward) touches ~4 months, so ~4
+requests per competition where the range was 1 — ~25 per run instead of 7.
+
+**Rejected:**
+- *One request per day* — ~530 per run, ~8,000/day at 15 runs: a different
+  relationship with a free, unofficial source than this ADR signed up for.
+- *ESPN's core API* (`sports.core.api.espn.com/.../events?dates=START-END`) — still
+  accepts ranges, but returns `$ref` links rather than events, so one extra request
+  per match and a rewrite of the parser.
+- *Per-team schedule endpoints* — ~100 requests per run and a different shape.
+
+If ESPN drops the month form too, the failure is the same loud one: `upcoming`
+exits 1 and the digest reports it.

@@ -27,7 +27,9 @@ from ingestion.upcoming import (
     season_for,
     EUROPEAN_ESPN_SLUGS,
     european_pending_events,
+    fetch_scoreboard,
     postponed_pairs,
+    scoreboard_months,
     scoreboard_window,
     select_cup_events,
     stalled,
@@ -678,3 +680,48 @@ def test_the_playoff_slugs_are_a_positive_match_not_a_negation():
     assert PLAYOFF_SEASON_SLUGS == frozenset(
         {"promotion-semifinals", "promotion-final"}
     )
+
+
+def test_months_cover_every_calendar_month_the_window_touches():
+    """ESPN serves one calendar month per request (dates=YYYYMM), so the window
+    becomes the months it overlaps -- including across the year turn."""
+    first = dt.date
+    assert scoreboard_months(first(2026, 10, 3), first(2026, 10, 28)) == [first(2026, 10, 1)]
+    assert scoreboard_months(first(2026, 12, 15), first(2027, 2, 1)) == [
+        first(2026, 12, 1), first(2027, 1, 1), first(2027, 2, 1),
+    ]
+    # the live shape: 30 days back, 45 forward
+    start, end = scoreboard_window(first(2026, 9, 29), 45, lookback=True)
+    assert scoreboard_months(start, end) == [
+        first(2026, 8, 1), first(2026, 9, 1), first(2026, 10, 1), first(2026, 11, 1),
+    ]
+
+
+def _event(event_id: str, date: str) -> dict:
+    return {"id": event_id, "date": date}
+
+
+def test_fetch_asks_month_by_month_and_returns_exactly_the_window(monkeypatch):
+    """ESPN has answered every date RANGE with 400 "Failed to get events
+    endpoint." since 2026-09-16 (ADR 0009 amendment). The fetch must never send
+    one again, and callers must still see only the window they asked for."""
+    by_month = {
+        "202609": [_event("a", "2026-09-10T19:45Z"), _event("b", "2026-09-28T19:45Z")],
+        "202610": [_event("c", "2026-10-03T14:00Z"), _event("b", "2026-09-28T19:45Z"),
+                   _event("d", "2026-10-31T15:00Z")],
+    }
+    urls: list[str] = []
+
+    def fake_espn_json(url: str, **_kw) -> dict:
+        urls.append(url)
+        month = url.split("dates=")[1].split("&")[0]
+        return {"events": by_month[month]}
+
+    monkeypatch.setattr("ingestion.upcoming.espn_json", fake_espn_json)
+    payload = fetch_scoreboard("eng.3", dt.date(2026, 9, 20), dt.date(2026, 10, 10))
+
+    dates = [u.split("dates=")[1].split("&")[0] for u in urls]
+    assert dates == ["202609", "202610"]  # one request per month, never START-END
+    assert all("/eng.3/scoreboard" in u for u in urls)
+    # outside the window (a: before, d: after) dropped; b seen twice, kept once
+    assert [e["id"] for e in payload["events"]] == ["b", "c"]
