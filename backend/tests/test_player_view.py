@@ -6,7 +6,7 @@ competition on each breakdown row, and a team_id filter to isolate one Spell.
 Anchor case: Adam Armstrong (multiple clubs + competitions in the data).
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import SessionLocal
 from app.main import player_summary
@@ -167,5 +167,67 @@ def test_endpoint_threads_min_minutes_through():
         assert result.games == oracle["games"]
         assert result.total == oracle["total"]
         assert all(r.minutes >= 60 for r in result.breakdown)
+    finally:
+        s.close()
+
+
+def test_current_club_is_the_latest_club_appearance_whatever_the_filter():
+    """The player hub is themed in his current club's colours, so the summary
+    names that club: the club of his most recent CLUB appearance. It must not
+    follow the window's filters — narrowing to an old Spell, or to his caps,
+    would otherwise repaint the page in the old club's (or a nation's) colours."""
+    s = SessionLocal()
+    try:
+        pid = _multiclub_player(s)
+        oracle = s.execute(
+            select(PlayerMatch.team_id, PlayerMatch.date)
+            .where(
+                PlayerMatch.player_id == pid,
+                PlayerMatch.competition_type != "international",
+            )
+            .order_by(PlayerMatch.date.desc())
+            .limit(1)
+        ).one()
+        full = entity_summary(s, entity="player", entity_id=pid, metric="goals", n=1000)
+        assert full["current_team_id"] == oracle.team_id
+        assert full["current_team"]
+
+        older = next(r["team_id"] for r in full["breakdown"] if r["team_id"] != oracle.team_id)
+        spell = entity_summary(
+            s, entity="player", entity_id=pid, metric="goals", n=1000, team_id=older
+        )
+        assert spell["current_team_id"] == oracle.team_id
+        caps = entity_summary(
+            s, entity="player", entity_id=pid, metric="goals", scope="international"
+        )
+        assert caps["current_team_id"] == oracle.team_id
+    finally:
+        s.close()
+
+
+def test_a_player_with_only_caps_has_no_current_club():
+    s = SessionLocal()
+    try:
+        # one grouped scan; a NOT IN anti-join over player_match takes minutes
+        pid = s.scalar(
+            select(PlayerMatch.player_id)
+            .group_by(PlayerMatch.player_id)
+            .having(func.bool_and(PlayerMatch.competition_type == "international"))
+            .limit(1)
+        )
+        assert pid is not None, "expected an international-only player in the data"
+        res = entity_summary(s, entity="player", entity_id=pid, metric="goals")
+        assert res["current_team_id"] is None
+        assert res["current_team"] is None
+    finally:
+        s.close()
+
+
+def test_a_team_summary_carries_no_current_club():
+    s = SessionLocal()
+    try:
+        tid = s.scalar(select(PlayerMatch.team_id).limit(1))
+        res = entity_summary(s, entity="team", entity_id=tid, metric="corners")
+        assert res["current_team_id"] is None
     finally:
         s.close()
