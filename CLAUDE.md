@@ -254,6 +254,15 @@ python -m venv .venv
 .venv/Scripts/python.exe -m ingestion.points_adjustments          # dry-run: print found deductions
 .venv/Scripts/python.exe -m ingestion.points_adjustments --apply  # upsert (idempotent; re-run for new rulings)
 
+# referees (ADR 0018 — the "(Referee)" on cached FBref match pages; zero-network, idempotent)
+.venv/Scripts/python.exe -m ingestion.referees                 # dry run: counts + near-duplicate review list
+.venv/Scripts/python.exe -m ingestion.referees --apply         # stamp fixtures.referee_id from the cache
+.venv/Scripts/python.exe -m ingestion.referees --fold --apply  # after adding a REFEREE_ALIASES entry: instant
+# In-season, matchday captures the referee (league, cup and international paths), so
+# this is the backfill/repair command. Near-duplicates are LISTED for you to rule
+# (REFEREE_ALIASES or CONFIRMED_DISTINCT), never merged. The scan reads ~17.5k pages:
+# ~25s with a warm OS file cache, ~45 min cold. Use --fold for a new alias.
+
 # nightly incremental (Phase 5 — TWO TIERS; incremental by design, never full-season)
 #
 # TIER 1 — UNATTENDED (team data + points): safe headless, no Cloudflare/rate limit.
