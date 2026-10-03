@@ -111,6 +111,25 @@ def test_two_yellow_dismissal_is_two_cards_one_red(ref_session):
     assert games[ids["a"]]["cards"] == 6 and games[ids["a"]]["fouls"] == 6
 
 
+def test_a_side_with_any_blank_card_row_is_unrecorded_not_undercounted(ref_session):
+    """Cards are never NULL today (ADR 0016), but if a page ever leaves one
+    blank, SUM would silently skip it. A Metric counts for a side only when
+    every row on that side carries it — the rule fouls already followed."""
+    session, ref_id, ids = ref_session
+    row = session.scalars(
+        select(PlayerMatch)
+        .where(PlayerMatch.fixture_id == ids["a"], PlayerMatch.is_home.is_(True))
+        .order_by(PlayerMatch.id)
+        .limit(1)
+    ).one()
+    row.yellows = None
+    session.flush()
+    games = {g["fixture_id"]: g for g in referee_summary(session, referee_id=ref_id)["games"]}
+    a = games[ids["a"]]
+    assert (a["cards"], a["yellows"]) == (None, None)
+    assert a["home_side"]["cards"] is None and a["away_side"]["cards"] == 3
+
+
 def test_unrecorded_metrics_are_none_not_zero(ref_session):
     session, ref_id, ids = ref_session
     games = {g["fixture_id"]: g for g in referee_summary(session, referee_id=ref_id)["games"]}

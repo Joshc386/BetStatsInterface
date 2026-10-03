@@ -71,8 +71,9 @@ def _window_fixtures(session, referee_id, scope, n, seasons):
 def _side_totals(session, fixture_ids) -> dict[tuple[int, bool], dict]:
     """Per (fixture, is_home): Cards / yellows / reds / fouls from player rows.
 
-    Fouls is None for a side where any row lacks it — the page did not publish
-    it, and a partial sum would read as a low count."""
+    A Metric is None for a side where ANY row lacks it — the page did not
+    publish it, and SUM would silently skip the blank row and read low. Fouls
+    is sparse in practice; cards never are today, but get the same rule."""
     if not fixture_ids:
         return {}
     rows = session.execute(
@@ -84,20 +85,23 @@ def _side_totals(session, fixture_ids) -> dict[tuple[int, bool], dict]:
             func.sum(PlayerMatch.reds).label("reds"),
             func.sum(PlayerMatch.fouls_committed).label("fouls"),
             func.count().label("players"),
+            func.count(PlayerMatch.yellows).label("yellow_rows"),
+            func.count(PlayerMatch.reds).label("red_rows"),
             func.count(PlayerMatch.fouls_committed).label("fouls_rows"),
         )
         .where(PlayerMatch.fixture_id.in_(fixture_ids))
         .group_by(PlayerMatch.fixture_id, PlayerMatch.is_home)
     ).all()
-    return {
-        (r.fixture_id, r.is_home): {
-            "cards": int(r.cards),
-            "yellows": int(r.yellows),
-            "reds": int(r.reds),
+    out = {}
+    for r in rows:
+        cards_ok = r.yellow_rows == r.players and r.red_rows == r.players
+        out[(r.fixture_id, r.is_home)] = {
+            "cards": int(r.cards) if cards_ok else None,
+            "yellows": int(r.yellows) if r.yellow_rows == r.players else None,
+            "reds": int(r.reds) if r.red_rows == r.players else None,
             "fouls": int(r.fouls) if r.fouls_rows == r.players else None,
         }
-        for r in rows
-    }
+    return out
 
 
 def _blank_side() -> dict:
