@@ -171,6 +171,14 @@ python -m venv .venv
 # list. It also runs on the NOTHING-PENDING path, so re-running a finished stage
 # repairs missing team rows with zero network -- that is the repair command now.
 
+# COMMUNITY SHIELD (club_cup, one match a season; held from 2020-21). NOT in the
+# daily matchday on purpose -- run it BY HAND each August once it is played (VPN OFF):
+.venv/Scripts/python.exe -m ingestion.run_backfill 2728 "Community Shield"  # the season it OPENS; team rows built by the same run
+# FBref's Shield page is single-match: each season links straight to the match
+# report, which stock read_schedule cannot follow (KeyError 'date'). The cup path
+# reads through ingestion/fbref_shim.FBref, which builds the one-row schedule from
+# that link. Same shape as the deferred UEFA Super Cup (ADR 0011) -- not attempted.
+
 # upcoming fixtures (ADR 0009 — ESPN scoreboard, display-only; idempotent)
 .venv/Scripts/python.exe -m ingestion.upcoming 45              # forward window in days (~1 request/league)
 # ALSO CARRIES THE DOMESTIC CUPS (ADR 0012). FA/EFL Cup take FINISHED events too

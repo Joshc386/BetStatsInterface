@@ -27,6 +27,11 @@
         "season_start": "Aug",
         "season_end": "May"
     },
+    "ENG-Community Shield": {
+        "FBref": "FA Community Shield",
+        "season_start": "Jul",
+        "season_end": "May"
+    },
     "EUR-Champions League": {
         "FBref": "UEFA Champions League",
         "season_start": "Jul",

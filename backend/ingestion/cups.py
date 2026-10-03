@@ -438,9 +438,11 @@ def backfill_cup_season(
     ingest_match. Commits per match (resumable). REQUIRES THE VPN OFF — and
     should run under the watchdog, as one-shot cup fetches hang on Cloudflare.
     """
-    import soccerdata as sd
+    # the shim builds a single-match competition's schedule (Community Shield)
+    # from its match page; identical to sd.FBref for every other competition
+    from ingestion.fbref_shim import FBref
 
-    available = sd.FBref.available_leagues()
+    available = FBref.available_leagues()
     if league not in available:
         raise ValueError(
             f"league {league!r} not available to the FBref reader; run "
@@ -454,7 +456,7 @@ def backfill_cup_season(
         if competition is None:
             raise ValueError(f"competition {cup_name!r} not seeded")
 
-        fb = sd.FBref(leagues=league, seasons=[season], headless=False)
+        fb = FBref(leagues=league, seasons=[season], headless=False)
         log(f"[{cup_name} {season}] fetching schedule (solves Cloudflare once)…")
         schedule = fb.read_schedule()
         games = select_covered_games(session, schedule, season)
@@ -702,6 +704,9 @@ def backfill_cup_team_match(
 LEAGUE_IDS = {
     "FA Cup": "ENG-FA Cup",
     "EFL Cup": "ENG-EFL Cup",
+    # One match a season, run by hand each August — deliberately NOT in
+    # matchday.CUP_PLAYER_COMPETITIONS, so the daily job never touches it.
+    "Community Shield": "ENG-Community Shield",
     "Champions League": "EUR-Champions League",
     "Europa League": "EUR-Europa League",
     "Conference League": "EUR-Conference League",

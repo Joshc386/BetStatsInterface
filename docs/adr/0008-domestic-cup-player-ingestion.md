@@ -134,3 +134,38 @@ End state: **834 club_cup team rows, 766 with corners**; the 68 NULLs are exactl
 34 FA Cup R3 fixtures × 2. Unlike shots/fouls, corners is NOT derivable from player
 rows, so FBref-vs-fd.co.uk corner agreement is a genuine cross-source check — the
 validation above doubles as evidence for the whole cup team-data path.
+
+## Update — Community Shield (2026-10-03)
+
+The Community Shield joins as its own `club_cup` competition: one match a season
+(league champions v FA Cup winners), counted in Cups-scope form windows like any
+cup tie (decided 2026-10-03). Held from 2020-21 onwards: **7 fixtures, 219 player
+rows, 14 team rows, all with corners**; every score checked against the published
+result.
+
+FBref's Shield page is single-match: each season on the history page links
+straight to the match report. That broke soccerdata twice, and both are fixed in
+`ingestion/fbref_shim.py`. The cup path now reads through the shim, which behaves
+exactly like `sd.FBref` for every other competition.
+
+- **`read_schedule`** follows the match page's "Scores & Fixtures" link to
+  FBref's matches-of-the-day page and dies on `KeyError: 'date'`. This is the
+  same blocker that deferred the UEFA Super Cup (ADR 0011). The shim builds the
+  one-row schedule from the match page itself, which is cached as
+  `match_<id>.html`, so nothing is fetched twice. Each side is named by its
+  stats-table caption, the schedule spelling the cup path pairs on ("Manchester
+  Utd", not the scorebox's "Manchester United").
+- **`read_seasons`** reads FBref's calendar-year label "2021" as the season code
+  20-21, so the 2020 and 2021 editions collided and 2021-22 vanished. The shim
+  derives the season from the year instead: an edition played in year Y opens
+  season Y/Y+1, so the 30 July 2022 Shield is 2022-23.
+
+Consequences:
+
+- A Shield settled on penalties is stored as the 90-minute draw, like every cup
+  tie. The neutral venue keeps FBref's listed home side, like the cup finals.
+- It is **not** in the daily matchday: no ESPN signal is wired, and one match a
+  year does not earn one. It is run by hand each August (`run_backfill <season>
+  "Community Shield"`, see CLAUDE.md).
+- The same shim should unblock the deferred UEFA Super Cup (ADR 0011). That has
+  not been attempted, and the deferral stands until it is revisited.
