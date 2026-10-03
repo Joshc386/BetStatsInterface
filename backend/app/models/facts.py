@@ -59,6 +59,11 @@ class Fixture(Base):
     # ESPN's per-match handle, stamped by `upcoming` (docs/adr/0015). What the
     # ESPN team-stat writer looks the summary up by.
     espn_event_id: Mapped[str | None] = mapped_column(Text)
+    # The recorded Referee, from the match page (ADR 0018). NULL until played —
+    # an Appointed referee lives only in the page address, never here.
+    referee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("referees.id", name="fk_fixtures_referee_id")
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -78,6 +83,7 @@ class Fixture(Base):
         Index("ix_fixtures_date", "date"),
         Index("ix_fixtures_status_date", "status", "date"),
         Index("ix_fixtures_comp_season", "competition_id", "season"),
+        Index("ix_fixtures_referee_date", "referee_id", "date"),
     )
 
 

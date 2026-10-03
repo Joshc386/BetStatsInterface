@@ -1,4 +1,4 @@
-"""Reference tables: competitions, teams, players.
+"""Reference tables: competitions, teams, players, referees.
 
 These hold the canonical entities and the per-source identifier columns used to
 reconcile FBref / football-data.co.uk / ESPN source names to one canonical id.
@@ -68,3 +68,18 @@ class Player(Base):
     current_team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id"))
     nationality: Mapped[str | None] = mapped_column(Text)
     position: Mapped[str | None] = mapped_column(Text)
+
+
+class Referee(Base):
+    """The official named as Referee on a Fixture's match page (CONTEXT.md).
+
+    No source gives a referee id, so identity is the printed name; one man
+    printed two ways is folded by ingestion.referees.REFEREE_ALIASES (ADR 0018).
+    """
+
+    __tablename__ = "referees"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (UniqueConstraint("name", name="uq_referees_name"),)
