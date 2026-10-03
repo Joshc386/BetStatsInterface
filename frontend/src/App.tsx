@@ -23,6 +23,9 @@ export default function App() {
             <Link to="/table" className="whitespace-nowrap text-muted hover:text-ink">
               League table
             </Link>
+            <Link to="/leaderboard" className="whitespace-nowrap text-muted hover:text-ink">
+              Players
+            </Link>
           </nav>
         </div>
       </header>

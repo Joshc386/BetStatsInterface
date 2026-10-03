@@ -10,6 +10,7 @@ import RefereeView from './pages/RefereeView.tsx'
 import FixtureView from './pages/FixtureView.tsx'
 import TablePage from './pages/TablePage.tsx'
 import MatchReport from './pages/MatchReport.tsx'
+import LeaderboardPage from './pages/LeaderboardPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="fixture/:homeId/vs/:awayId" element={<FixtureView />} />
           <Route path="match/:id" element={<MatchReport />} />
           <Route path="table" element={<TablePage />} />
+          <Route path="leaderboard" element={<LeaderboardPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

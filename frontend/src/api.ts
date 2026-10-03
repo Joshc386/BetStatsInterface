@@ -298,6 +298,40 @@ export interface MatchReport {
   away: MatchSide
 }
 
+// The Leaderboard (CONTEXT.md, ADR 0019): each player over his club's last 10
+// League games with player data, ranked per 90.
+export type LeaderMetric =
+  | 'shots' | 'sot' | 'goals' | 'assists' | 'tackles' | 'fouls_committed' | 'fouls_drawn' | 'cards'
+
+export interface LeaderRow {
+  player_id: number
+  player: string
+  team_id: number
+  per90: number // the ranking figure
+  total: number
+  minutes: number
+  apps: number
+  carded_apps: number | null // Cards list only
+}
+
+export interface LeaderClub {
+  team_id: number
+  team: string
+  games: number // League games with player data in the window (max 10)
+  min_minutes: number
+  competitions: string[] // newest first; more than one = crosses divisions
+  awaiting: { fixture_id: number; date: string; opponent: string }[]
+}
+
+export interface Leaderboard {
+  competition_id: number
+  competition: string
+  season: string
+  window: number
+  clubs: LeaderClub[]
+  categories: Record<LeaderMetric, LeaderRow[]>
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   let res: Response
   try {
@@ -348,6 +382,8 @@ export const api = {
     seasons?.forEach((s) => sp.append('seasons', s))
     return getJSON<RefereeSummary>(`/referees/${id}/summary?${sp}`)
   },
+  leaderboard: (competitionId: number) =>
+    getJSON<Leaderboard>(`/leaderboard?competition_id=${competitionId}`),
   matchReport: (fixtureId: number) =>
     getJSON<MatchReport>(`/fixtures/${fixtureId}/report`),
   fixturesUpcoming: (days = 14) =>

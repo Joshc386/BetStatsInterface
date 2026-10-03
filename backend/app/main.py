@@ -19,12 +19,14 @@ from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Referee, Team
 from app.fixtures import fixture_comparison, upcoming_fixtures
+from app.leaderboard import leaderboard
 from app.match_report import match_report
 from app.referees import METRICS as REFEREE_METRICS, referee_list, referee_summary
 from app.schemas import (
     CompetitionOut,
     FixtureComparison,
     FixtureRow,
+    Leaderboard,
     MatchReport,
     RefereeOut,
     RefereeSummary,
@@ -278,6 +280,19 @@ def table(
         session, competition_id=competition_id, season=season, as_of=as_of
     )
     return [TableRow(**r) for r in rows]
+
+
+@app.get("/leaderboard", response_model=Leaderboard)
+def leaderboard_endpoint(
+    competition_id: int = Query(..., description="a league (club_league) competition id"),
+    session: Session = Depends(get_session),
+) -> Leaderboard:
+    """One league's top 10 per Metric over each club's last 10 League games
+    with player data, ranked per 90 (CONTEXT.md "Leaderboard", ADR 0019)."""
+    board = leaderboard(session, competition_id=competition_id)
+    if board is None:
+        raise HTTPException(404, f"no league with games for competition {competition_id}")
+    return Leaderboard.model_validate(board)
 
 
 @app.get("/fixtures/compare", response_model=FixtureComparison)
