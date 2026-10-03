@@ -115,3 +115,63 @@ def test_aliases_never_chain():
 def test_confirmed_distinct_pairs_are_sorted_like_the_review_list():
     """Otherwise a ruling silently fails to suppress its pair."""
     assert all(tuple(sorted(p)) == p for p in CONFIRMED_DISTINCT)
+
+
+def _stamp_fixture(session):
+    """Any finished fixture that already carries a referee (rolled back after)."""
+    from sqlalchemy import select
+
+    from app.models.facts import Fixture
+
+    return session.scalars(
+        select(Fixture).where(Fixture.referee_id.is_not(None)).limit(1)
+    ).one()
+
+
+def test_record_referee_creates_the_referee_and_stamps_the_fixture():
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models.reference import Referee
+    from ingestion.referees import record_referee
+
+    with SessionLocal() as session:
+        fixture = _stamp_fixture(session)
+        name = record_referee(
+            session, fixture, _page(_LINE.format(ref="Zz Test Referee"))
+        )
+        assert name == "Zz Test Referee"
+        created = session.scalar(select(Referee).where(Referee.name == name))
+        assert fixture.referee_id == created.id
+        session.rollback()
+
+
+def test_record_referee_folds_an_alias_onto_the_existing_row():
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models.reference import Referee
+    from ingestion.referees import record_referee
+
+    with SessionLocal() as session:
+        before = session.scalar(select(func.count()).select_from(Referee))
+        fixture = _stamp_fixture(session)
+        record_referee(session, fixture, _page(_LINE.format(ref="Steve Martin")))
+        stephen = session.scalar(
+            select(Referee.id).where(Referee.name == "Stephen Martin")
+        )
+        assert fixture.referee_id == stephen
+        assert session.scalar(select(func.count()).select_from(Referee)) == before
+        session.rollback()
+
+
+def test_record_referee_leaves_a_known_referee_alone_when_the_page_names_none():
+    from app.db import SessionLocal
+    from ingestion.referees import record_referee
+
+    with SessionLocal() as session:
+        fixture = _stamp_fixture(session)
+        known = fixture.referee_id
+        assert record_referee(session, fixture, _page("")) is None
+        assert fixture.referee_id == known
+        session.rollback()

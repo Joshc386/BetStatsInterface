@@ -30,6 +30,7 @@ from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch
 from app.models.reference import Competition, Player, Team
 from ingestion.names import clean_name, normalise_for_match
+from ingestion.referees import record_referee
 
 # soccerdata writes each fetched match page here; we re-read it to recover the
 # per-player FBref ids that read_player_match_stats drops.
@@ -745,6 +746,8 @@ def backfill_season(
                 for team_name, team_fbref_id in parse_team_ids(html).items():
                     resolve_fbref_team(session, team_name, fbref_id=team_fbref_id)
                 fixture = session.get(Fixture, fixture_id)
+                # the Officials line is on the same page (ADR 0018)
+                record_referee(session, fixture, html)
                 n = ingest_match(
                     session, fixture, ctype_by_comp[fixture.competition_id],
                     df, player_ids,

@@ -52,6 +52,7 @@ from ingestion.players import (
     parse_scoreline,
     parse_team_ids,
 )
+from ingestion.referees import record_referee
 
 # A cup tie is "covered" when a side plays in one of these that season
 # (season-aware, so a relegated club stops dragging its cup ties in once it
@@ -507,6 +508,7 @@ def backfill_cup_season(
                     session, competition, season, home, away, game["date"], game_id,
                     stage=stage,
                 )
+                record_referee(session, fixture, html)  # ADR 0018
                 # ingest immediately while the page df is in hand (resumable)
                 n = ingest_match(
                     session, fixture, competition.type, df, parse_player_ids(html)
