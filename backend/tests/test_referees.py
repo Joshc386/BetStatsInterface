@@ -193,3 +193,31 @@ def test_record_referee_leaves_a_known_referee_alone_when_the_page_names_none():
         assert record_referee(session, fixture, _page("")) is None
         assert fixture.referee_id == known
         session.rollback()
+
+
+def test_fold_aliases_repoints_fixtures_without_rereading_pages(monkeypatch):
+    """Adding an alias after the backfill: fold moves that spelling's Fixtures
+    onto the canonical referee, creating him if needed. Idempotent."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models.reference import Referee
+    from ingestion import referees as mod
+
+    monkeypatch.setitem(mod.REFEREE_ALIASES, "Zz Printed Spelling", "Zz Canonical Spelling")
+    with SessionLocal() as session:
+        printed = Referee(name="Zz Printed Spelling")
+        session.add(printed)
+        session.flush()
+        fixture = _stamp_fixture(session)
+        fixture.referee_id = printed.id
+        session.flush()
+
+        assert mod.fold_aliases(session) >= 1
+        canonical = session.scalar(
+            select(Referee.id).where(Referee.name == "Zz Canonical Spelling")
+        )
+        session.refresh(fixture)
+        assert fixture.referee_id == canonical
+        assert mod.fold_aliases(session) == 0  # nothing left on the old spelling
+        session.rollback()

@@ -10,8 +10,10 @@ Two writers, one helper:
   ingest paths with the page they already hold;
 - history, `backfill_referees` reads the cached pages — zero network.
 
-Run:  python -m ingestion.referees          # dry run: report + review list, no writes
-      python -m ingestion.referees --apply  # stamp fixtures.referee_id (idempotent)
+Run:  python -m ingestion.referees                 # dry run: report + review list, no writes
+      python -m ingestion.referees --apply         # stamp fixtures.referee_id (idempotent)
+      python -m ingestion.referees --fold [--apply] # after adding an alias: re-point its
+                                                   # Fixtures, no page re-read (instant)
 
 This module is a LEAF (app.models + stdlib only) so players/cups/internationals
 can import it without a cycle; the cache path is imported lazily in the backfill.
@@ -26,7 +28,7 @@ import unicodedata
 from collections import defaultdict
 from itertools import combinations
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -65,6 +67,12 @@ REFEREE_ALIASES: dict[str, str] = {
     "Sadok Selmi": "Sadek Selmi",
     "Vilhjálmur Alvar Þórarinsson": "Vilhjálmur Þórarinsson",
     "Wilton Pereira Sampaio": "Wilton Sampaio",
+    # Found by the trailing-name check (review, 2026-10-03); folded onto the
+    # FULLER printing by the user's ruling. "II" read as a printing variant.
+    "Antonio Matéu": "Antonio Matéu Lahoz",
+    "Ring Nyier": "Ring Nyier Akech Malong",
+    "Taqi Aljaafari": "Taqi Aljaafari Jahari",
+    "István Vad": "István Vad II",
 }
 
 # Same-surname pairs a human has ruled are DIFFERENT people, so the review list
@@ -187,6 +195,24 @@ def record_referee(session: Session, fixture: Fixture, match_html: str) -> str |
     return name
 
 
+def fold_aliases(session: Session) -> int:
+    """Re-point Fixtures stamped with an aliased spelling onto its canonical
+    referee; return how many moved. The cheap half of "add an alias, re-run":
+    the alias is already decided, so no cached page needs reading again. The
+    old spelling's row stays, pointed at by nothing (search and the picker
+    list only referees with a Fixture). Each UPDATE is bounded to one id."""
+    moved = 0
+    for printed, canonical in REFEREE_ALIASES.items():
+        old = session.scalar(select(Referee.id).where(Referee.name == printed))
+        if old is None:
+            continue
+        new = _referee_id(session, canonical)
+        moved += session.execute(
+            update(Fixture).where(Fixture.referee_id == old).values(referee_id=new)
+        ).rowcount
+    return moved
+
+
 def _read_head(path) -> str:
     with open(path, "rb") as fh:
         return fh.read(_HEAD_BYTES).decode("utf-8", errors="ignore")
@@ -283,4 +309,14 @@ if __name__ == "__main__":
     # Foreign referees' names (Romanian, Turkish, ...) are outside cp1252; the
     # Windows console would crash mid-report on the first one.
     sys.stdout.reconfigure(encoding="utf-8")
-    backfill_referees(apply="--apply" in sys.argv)
+    if "--fold" in sys.argv:
+        with SessionLocal() as s:
+            n = fold_aliases(s)
+            if "--apply" in sys.argv:
+                s.commit()
+                print(f"folded: {n} fixtures moved onto canonical referees")
+            else:
+                s.rollback()
+                print(f"dry run: {n} fixtures would move (re-run with --apply)")
+    else:
+        backfill_referees(apply="--apply" in sys.argv)
