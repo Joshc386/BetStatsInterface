@@ -38,9 +38,11 @@ page labels the difference from the team pages; nothing reconciles it silently.
 
 1. **League team rows hide exactly the bookings that matter.** football-data.co.uk records
    a two-yellow dismissal as 1 red and 0 yellows. Across league team-sides, the two sources
-   disagree on yellows for **3.6%**, and **88%** of those had a red (measured 2026-09-29). A
-   referee page asks how readily he books players, and that convention removes the second
-   booking of every player he sends off.
+   disagree on yellows for **3.6%**, and **88%** of those had a red (measured 2026-09-29).
+   On the 707 league team-sides with a two-yellow dismissal, football-data.co.uk's yellows
+   are the FBref count minus **both** bookings in 689, minus one in 2, and equal in 13
+   (measured 2026-10-03). A referee page asks how readily he books players, and that
+   convention removes both bookings of every player he sends off for two yellows.
 2. **The team rows mix sources by scope.** Reading `team_match` would put football-data.co.uk's
    convention on league matches and FBref's on everything else. The hub's scope toggle
    (League / Cups / Europe / International / All) would then change the counting rule as well
@@ -71,8 +73,9 @@ both referee.
 
 ## Consequences
 
-- On a league match with a second-yellow dismissal, the referee page shows one more yellow
-  than the team page, by design. Both pages say which source they count from.
+- On a league match with a second-yellow dismissal, the referee page usually shows **two**
+  more yellows per dismissal than the team page, by design. The referee page says which
+  source it counts from and why.
 - On any match with a second-yellow dismissal, yellows + reds is one more than Cards per
   dismissal. That is the **Cards** definition, not an error.
 - A referee's figures exist only where FBref player rows exist. Every finished Fixture is
