@@ -36,7 +36,7 @@ The referee **you** name on the **Fixture view** for a match not yet played — 
 _Avoid_: calling an Appointed referee "the referee" before kick-off — the recorded Referee only exists after the match.
 
 **Match report**:
-The page for one **finished** **Fixture**: score, competition, the recorded **Referee** (linked to his page), both sides' totals, and both squads' **Player-Match** rows. Every total the player rows carry (shots, shots on target, fouls, yellows, reds, **Cards**) is **summed from those rows** (FBref), so the totals always reconcile with the player table and with the Referee's figure for the same Fixture. Only the score and corners come from the **Team-Match** row, because player rows cannot give them: own goals are credited to no player, and corners are not recorded per player. A league total can therefore differ from the team page's row for the same game. Measured 2026-10-03, that happens for 2.7% of league sides on shots and 3.6% on yellows. The difference is always labelled, never reconciled. Every per-game row in the app leads to it. A scheduled Fixture has no Match report; it has the **Fixture view**.
+The page for one **finished** **Fixture**: score, competition, the recorded **Referee** (linked to his page), both sides' totals, and both squads' **Player-Match** rows. Every total the player rows carry (shots, shots on target, fouls, yellows, reds, **Cards**) is **summed from those rows** (FBref), so the totals always reconcile with the player table and with the Referee's figure for the same Fixture. Only the score and corners come from the **Team-Match** row, because player rows cannot give them: own goals are credited to no player, and corners are not recorded per player. A league total can therefore differ from the team page's row for the same game. Measured 2026-10-03, that happens for 2.7% of league sides on shots and 3.6% on yellows. The difference is always labelled, never reconciled. The team, player and Referee game lists and the **Fixture view**'s form and H2H rows lead to it. A scheduled Fixture has no Match report; it has the **Fixture view**.
 _Avoid_: "Fixture view" for this page (that is the two-team comparison); "match" as a bare noun.
 
 ### Stats & summaries
@@ -160,7 +160,7 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 - A **Breakdown** is the set of **Metric** rows a **Summary Metric** aggregates.
 - A **Head-to-Head** is a **Rolling Window** filtered to one opponent; its **Breakdown** is the two teams' past meetings.
 - The **Fixture view** compares two teams by **Team form** (each team's recent Summary Metrics vs all opponents) and **Head-to-Head**; the **Team hub** is one team's full deep-dive. Both are read-only surfaces over the same facts, not stored entities.
-- A finished **Fixture** has one **Match report**, which names at most one **Referee**. Every per-game row (team, player and Referee game lists; the **Fixture view**'s form and H2H rows) leads to its Fixture's Match report, and the Match report leads back to its Referee. The Match report is also a read-only surface, not a stored entity.
+- A finished **Fixture** has one **Match report**, which names at most one **Referee**. The team, player and Referee game lists and the **Fixture view**'s form and H2H rows lead to their Fixture's Match report, and the Match report leads back to its Referee. The Match report is also a read-only surface, not a stored entity.
 
 ## Example dialogue
 
