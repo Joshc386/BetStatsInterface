@@ -42,6 +42,10 @@ COMPETITIONS = [
     # competition_id keeps "FA Cup form" and "EFL Cup form" separable.
     ("FA Cup", "club_cup", "England", None, None, "FA Cup"),
     ("EFL Cup", "club_cup", "England", None, None, "EFL Cup"),
+    # One match a season (league champions v FA Cup winners), counted in Cups
+    # form windows like the other domestic cups. FBref's page is single-match,
+    # read via ingestion.fbref_shim.
+    ("Community Shield", "club_cup", "England", None, None, "FA Community Shield"),
     # European club competitions (ADR 0011): covered ties only, FBref-sourced.
     # fbref_key is the exact name on FBref's comps index (verified from cache).
     ("Champions League", "club_european", None, None, None, "UEFA Champions League"),
