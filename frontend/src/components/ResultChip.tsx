@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 /** The W/D/L badge. One definition so a match reads the same everywhere —
  * the fixture form lists and the team/player breakdown tables. */
 export const resultClass = (r: string | null | undefined) =>
@@ -5,15 +7,16 @@ export const resultClass = (r: string | null | undefined) =>
     : r === 'L' ? 'bg-rose-100 text-rose-800'
       : 'bg-stone-200 text-stone-700'
 
-export function ResultChip({ result }: { result: string | null | undefined }) {
+/** With `to`, the chip opens that game's Match report. */
+export function ResultChip({ result, to }: { result: string | null | undefined; to?: string | null }) {
   // No team row for this appearance -> hold the column's width, print nothing.
   if (!result) return <span className="inline-block h-5 w-5" />
+  const chip = `grid h-5 w-5 shrink-0 place-items-center rounded text-xs font-bold ${resultClass(result)}`
+  if (!to) return <span className={chip}>{result}</span>
   return (
-    <span
-      className={`grid h-5 w-5 shrink-0 place-items-center rounded text-xs font-bold ${resultClass(result)}`}
-    >
+    <Link to={to} title="Match report" className={`${chip} hover:ring-2 hover:ring-accent-ink`}>
       {result}
-    </span>
+    </Link>
   )
 }
 

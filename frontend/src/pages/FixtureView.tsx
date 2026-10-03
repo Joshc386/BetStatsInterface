@@ -11,7 +11,7 @@ import { LastNInput } from '../components/LastNInput'
 import { resultClass } from '../components/ResultChip'
 import { ControlBar, ControlGroup, Field, Toggle } from '../components/controls'
 import { Hero, KitShirt } from '../components/Kit'
-import { EntityLink, refereeHref } from '../components/EntityLink'
+import { matchHref } from '../components/EntityLink'
 import {
   REFEREE_KIT, awayTheme, kitOf, refereeTheme, teamTheme, themeStyle, type Theme,
 } from '../lib/teamTheme'
@@ -408,13 +408,13 @@ function H2HMode({
 }
 
 function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition: string; host: FixtureRow; guest: FixtureRow; a: FixtureRow } }) {
-  const [open, setOpen] = useState(false)
   const hostName = m.guest.opponent
   const guestName = m.host.opponent
   return (
     <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
+      <Link
+        to={matchHref(m.fixture_id)!}
+        title="Match report"
         className="flex w-full items-center gap-3 py-2 text-left hover:bg-sunken"
       >
         <span className="w-24 shrink-0 text-xs text-muted">{date(m.date)}</span>
@@ -430,8 +430,7 @@ function MeetingRow({ m }: { m: { fixture_id: number; date: string; competition:
           <KitShirt kit={kitOf(m.guest.team_id)} />
           {guestName}
         </span>
-      </button>
-      {open && <DrillDown fixtureId={m.fixture_id} />}
+      </Link>
     </div>
   )
 }
@@ -478,11 +477,11 @@ function FixtureList({
 }
 
 function FixtureRowItem({ r, showComp }: { r: FixtureRow; showComp?: boolean }) {
-  const [open, setOpen] = useState(false)
   return (
     <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
+      <Link
+        to={matchHref(r.fixture_id)!}
+        title="Match report"
         className="flex w-full items-center gap-2 py-2 text-left text-sm hover:bg-sunken"
       >
         <span className="w-20 shrink-0 text-xs text-muted">{date(r.date)}</span>
@@ -495,61 +494,7 @@ function FixtureRowItem({ r, showComp }: { r: FixtureRow; showComp?: boolean }) 
           <span className="max-w-28 shrink-0 truncate text-xs text-faint">{r.competition}</span>
         )}
         <span className="font-medium text-ink">{r.gf}–{r.ga}</span>
-      </button>
-      {open && <DrillDown fixtureId={r.fixture_id} />}
-    </div>
-  )
-}
-
-function DrillDown({ fixtureId }: { fixtureId: number }) {
-  const [rows, setRows] = useState<FixtureRow[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    api
-      .fixtureDetail(fixtureId)
-      .then((d) => !cancelled && setRows(d))
-      .catch((e) => !cancelled && setErr(String(e.message ?? e)))
-    return () => {
-      cancelled = true
-    }
-  }, [fixtureId])
-
-  if (err) return <p className="px-3 py-2 text-xs text-rose-700">{err}</p>
-  if (!rows) return <p className="px-3 py-2 text-xs text-muted">Loading…</p>
-  const host = rows.find((r) => r.is_home) ?? rows[0]
-  const guest = rows.find((r) => !r.is_home) ?? rows[1]
-  const lines: Array<[string, number | string | null, number | string | null]> = [
-    ['Goals', host.gf, guest.gf],
-    ['Shots', host.shots, guest.shots],
-    ['On target', host.sot, guest.sot],
-    ['Corners', host.corners, guest.corners],
-    ['Fouls', host.fouls, guest.fouls],
-    ['Yellows', host.yellows, guest.yellows],
-    ['Reds', host.reds, guest.reds],
-  ]
-  return (
-    <div className="mb-2 ml-4 rounded-md border border-line bg-sunken p-3 text-sm">
-      {host.referee && (
-        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted">
-          <KitShirt kit={REFEREE_KIT} className="h-3.5 w-3.5" />
-          Referee:
-          <EntityLink to={refereeHref(host.referee_id)} className="font-medium text-ink">
-            {host.referee}
-          </EntityLink>
-        </div>
-      )}
-      <div className="mb-1 flex justify-between text-xs text-muted">
-        <span>{guest.opponent}</span>
-        <span>{host.opponent}</span>
-      </div>
-      {lines.map(([label, h, g]) => (
-        <div key={label} className="flex items-center justify-between border-t border-line py-1">
-          <span className="w-10 text-right font-medium text-ink">{h ?? '—'}</span>
-          <span className="text-xs text-muted">{label}</span>
-          <span className="w-10 font-medium text-ink">{g ?? '—'}</span>
-        </div>
-      ))}
+      </Link>
     </div>
   )
 }
