@@ -561,7 +561,7 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
 function AppointedReferee() {
   const [params, setParams] = useSearchParams()
   const raw = params.get('ref')
-  const refId = raw !== null && Number.isFinite(Number(raw)) ? Number(raw) : null
+  const refId = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null // '' is not referee 0
   const [referees, setReferees] = useState<RefereeOut[] | null>(null)
   const [text, setText] = useState('')
   const [n, setN] = useState(10)
@@ -595,13 +595,12 @@ function AppointedReferee() {
     }
   }, [refId, n])
 
-  // the datalist hands back the full name; names are unique (uq_referees_name)
-  const pick = (name: string) => {
-    setText(name)
+  // names are unique (uq_referees_name), so the exact name identifies him
+  const commit = (name: string) => {
     const r = referees?.find((x) => x.name === name)
     if (!r) return
-    // a fresh copy: mutating the router's own params object left the effect
-    // below unfired after a pick (the render saw the change, React did not)
+    // a fresh copy: mutating the router's own params object left the summary
+    // effect unfired after a pick (the render saw the change, React did not)
     setParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('ref', String(r.id))
@@ -637,7 +636,15 @@ function AppointedReferee() {
           <input
             list="referee-names"
             value={text}
-            onChange={(e) => pick(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value)
+              // A pick from the list arrives whole and commits at once; typing
+              // waits for Enter, so a name that prefixes a longer one ("Antonio
+              // Matéu" / "Antonio Matéu Lahoz") never commits half-typed.
+              const kind = (e.nativeEvent as InputEvent).inputType
+              if (kind !== 'insertText' && !kind?.startsWith('delete')) commit(e.target.value)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && commit(text)}
             placeholder={refId === null ? 'Type the appointed referee’s name…' : 'Change referee…'}
             className="w-64 max-w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink outline-none focus:border-accent-ink"
           />
@@ -659,7 +666,7 @@ function AppointedReferee() {
       {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
       {refId === null && (
         <p className="mt-2 text-xs text-faint">
-          Appointments are confirmed about a day before kick-off. Pick him here to see his record.
+          Appointments are confirmed about a day before kick-off. Pick him from the list (or type his name and press Enter) to see his record.
         </p>
       )}
 
