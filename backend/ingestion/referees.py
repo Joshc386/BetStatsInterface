@@ -103,6 +103,12 @@ def _fold(token: str) -> str:
     return "".join(c for c in decomposed if c.isalpha()).lower()
 
 
+def _subset(a: str, b: str) -> bool:
+    """One printing's (folded) words all appear in the other's."""
+    ta, tb = {_fold(t) for t in a.split()}, {_fold(t) for t in b.split()}
+    return ta <= tb or tb <= ta
+
+
 def _compatible(a: str, b: str) -> bool:
     """Could these two printed names be one man? Only ever a reason to ASK.
 
@@ -111,11 +117,9 @@ def _compatible(a: str, b: str) -> bool:
     in shape: an initial ("S."), a prefix ("Sam"/"Samuel"), or a shared stem
     of 3+ letters ("Steve"/"Stephen").
     """
-    ta = [_fold(t) for t in a.split()]
-    tb = [_fold(t) for t in b.split()]
-    if set(ta) <= set(tb) or set(tb) <= set(ta):
+    if _subset(a, b):
         return True
-    fa, fb = ta[0], tb[0]
+    fa, fb = _fold(a.split()[0]), _fold(b.split()[0])
     if not fa or not fb or fa[0] != fb[0]:
         return False
     stem = 0
@@ -129,22 +133,33 @@ def _compatible(a: str, b: str) -> bool:
 def near_duplicates(names: list[str]) -> list[tuple[str, str]]:
     """Pairs of distinct printed names that might be one man, for a human to rule.
 
-    Same surname (accent-folded) AND compatible first names — CONTEXT.md's
-    definition. A shared surname alone is not enough: Elliot and James Bell are
+    Two ways in. Same surname (accent-folded) AND compatible first names —
+    CONTEXT.md's definition. Or same first name AND one printing's words all in
+    the other's: "Antonio Matéu" / "Antonio Matéu Lahoz" add a second surname,
+    so their last words differ and surname grouping never compares them. A
+    shared surname or first name alone is not enough: Elliot and James Bell are
     two men, and listing every Hernandez would bury the pairs that matter.
     Listed, never merged. Sorted pairs, sorted list, so runs diff cleanly.
     """
     by_surname: dict[str, set[str]] = defaultdict(set)
+    by_first: dict[str, set[str]] = defaultdict(set)
     for name in names:
         parts = name.split()
         if parts:
             by_surname[_fold(parts[-1])].add(name)
-    return sorted(
+            by_first[_fold(parts[0])].add(name)
+    pairs = {
         pair
         for group in by_surname.values()
         for pair in combinations(sorted(group), 2)
         if _compatible(*pair)
-    )
+    } | {
+        pair
+        for group in by_first.values()
+        for pair in combinations(sorted(group), 2)
+        if _subset(*pair)
+    }
+    return sorted(pairs)
 
 
 def _referee_id(session: Session, name: str) -> int:

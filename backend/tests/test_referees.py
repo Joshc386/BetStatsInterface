@@ -103,6 +103,19 @@ def test_near_duplicates_ignores_unrelated_first_names():
     assert near_duplicates(["Andy Madley", "Robert Madley"]) == []
 
 
+def test_near_duplicates_flags_trailing_names_across_surnames():
+    """"Antonio Matéu" vs "Antonio Matéu Lahoz": the longer printing adds a
+    second surname, so the last words differ and surname grouping alone never
+    compared them (found in review, 2026-10-03)."""
+    assert ("Antonio Matéu", "Antonio Matéu Lahoz") in near_duplicates(
+        ["Antonio Matéu Lahoz", "Antonio Matéu"]
+    )
+
+
+def test_near_duplicates_ignores_a_shared_first_name_alone():
+    assert near_duplicates(["Andy Madley", "Andy Woolmer"]) == []
+
+
 def test_near_duplicates_never_flags_different_surnames():
     assert near_duplicates(["Ben Atkinson", "Ben Toner"]) == []
 
@@ -123,9 +136,14 @@ def _stamp_fixture(session):
 
     from app.models.facts import Fixture
 
-    return session.scalars(
-        select(Fixture).where(Fixture.referee_id.is_not(None)).limit(1)
-    ).one()
+    fixture = session.scalars(
+        select(Fixture)
+        .where(Fixture.referee_id.is_not(None))
+        .order_by(Fixture.id)
+        .limit(1)
+    ).first()
+    assert fixture is not None, "no fixture carries a referee — run the backfill"
+    return fixture
 
 
 def test_record_referee_creates_the_referee_and_stamps_the_fixture():
