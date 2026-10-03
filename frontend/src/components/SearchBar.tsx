@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type SearchHit } from '../api'
 import { KitShirt } from './Kit'
-import { kitOf } from '../lib/teamTheme'
+import { REFEREE_KIT, kitOf } from '../lib/teamTheme'
+
+const BADGE: Record<SearchHit['entity'], string> = {
+  team: 'bg-sky-100 text-sky-800',
+  player: 'bg-emerald-100 text-emerald-800',
+  referee: 'bg-zinc-200 text-zinc-800',
+}
 
 export default function SearchBar({ compact = false }: { compact?: boolean }) {
   const [q, setQ] = useState('')
@@ -67,7 +73,7 @@ export default function SearchBar({ compact = false }: { compact?: boolean }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => hits.length && setOpen(true)}
-        placeholder="Search team or player…"
+        placeholder="Search team, player or referee…"
         className={`w-full rounded-md border border-line bg-card px-3 text-ink placeholder:text-muted outline-none focus:border-accent-ink ${
           compact ? 'py-1.5 text-sm' : 'py-2.5 text-base'
         }`}
@@ -83,15 +89,10 @@ export default function SearchBar({ compact = false }: { compact?: boolean }) {
               >
                 <span className="flex items-center gap-2 text-ink">
                   {h.entity === 'team' && <KitShirt kit={kitOf(h.id)} />}
+                  {h.entity === 'referee' && <KitShirt kit={REFEREE_KIT} />}
                   {h.name}
                 </span>
-                <span
-                  className={`ml-3 rounded px-1.5 py-0.5 text-xs ${
-                    h.entity === 'team'
-                      ? 'bg-sky-100 text-sky-800'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
+                <span className={`ml-3 rounded px-1.5 py-0.5 text-xs ${BADGE[h.entity]}`}>
                   {h.entity}
                 </span>
               </button>

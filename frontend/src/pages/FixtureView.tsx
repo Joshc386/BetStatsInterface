@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { api, type FixtureComparison, type FixtureRow } from '../api'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import {
+  REFEREE_METRICS, api, type FixtureComparison, type FixtureRow, type RefereeOut,
+  type RefereeSummary,
+} from '../api'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { useCatalogue } from '../useCatalogue'
 import { SquadSection } from './SquadForm'
@@ -8,7 +11,10 @@ import { LastNInput } from '../components/LastNInput'
 import { resultClass } from '../components/ResultChip'
 import { ControlBar, ControlGroup, Field, Toggle } from '../components/controls'
 import { Hero, KitShirt } from '../components/Kit'
-import { awayTheme, kitOf, teamTheme, themeStyle, type Theme } from '../lib/teamTheme'
+import { EntityLink, refereeHref } from '../components/EntityLink'
+import {
+  REFEREE_KIT, awayTheme, kitOf, refereeTheme, teamTheme, themeStyle, type Theme,
+} from '../lib/teamTheme'
 
 type Venue = 'recent' | 'home' | 'away'
 type Mode = 'form' | 'h2h' | 'squad'
@@ -170,6 +176,8 @@ export default function FixtureView() {
         {data.home_name} (home) vs {data.away_name} (away) · form: {SCOPE_LABELS[scope]} ·
         H2H: all meetings, every competition
       </p>
+
+      <AppointedReferee />
 
       {/* Mode + window */}
       <ControlBar>
@@ -522,6 +530,15 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
   ]
   return (
     <div className="mb-2 ml-4 rounded-md border border-line bg-sunken p-3 text-sm">
+      {host.referee && (
+        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted">
+          <KitShirt kit={REFEREE_KIT} className="h-3.5 w-3.5" />
+          Referee:
+          <EntityLink to={refereeHref(host.referee_id)} className="font-medium text-ink">
+            {host.referee}
+          </EntityLink>
+        </div>
+      )}
       <div className="mb-1 flex justify-between text-xs text-muted">
         <span>{guest.opponent}</span>
         <span>{host.opponent}</span>
@@ -533,6 +550,157 @@ function DrillDown({ fixtureId }: { fixtureId: number }) {
           <span className="w-10 font-medium text-ink">{g ?? '—'}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** The Appointed referee: picked by hand (appointments are confirmed about a
+ * day before kick-off and no source we use knows them sooner), held in the page
+ * address as ?ref= and never stored (CONTEXT.md "Appointed referee"). Shows his
+ * League record over a Last-N window; his name opens the full Referee hub. */
+function AppointedReferee() {
+  const [params, setParams] = useSearchParams()
+  const raw = params.get('ref')
+  const refId = raw !== null && Number.isFinite(Number(raw)) ? Number(raw) : null
+  const [referees, setReferees] = useState<RefereeOut[] | null>(null)
+  const [text, setText] = useState('')
+  const [n, setN] = useState(10)
+  const [summary, setSummary] = useState<RefereeSummary | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .referees()
+      .then((r) => !cancelled && setReferees(r))
+      .catch((e) => !cancelled && setError(String(e.message ?? e)))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (refId === null) {
+      setSummary(null)
+      return
+    }
+    let cancelled = false
+    setError(null)
+    api
+      .refereeSummary(refId, { n: String(n), scope: 'club_league' })
+      .then((s) => !cancelled && setSummary(s))
+      .catch((e) => !cancelled && setError(String(e.message ?? e)))
+    return () => {
+      cancelled = true
+    }
+  }, [refId, n])
+
+  // the datalist hands back the full name; names are unique (uq_referees_name)
+  const pick = (name: string) => {
+    setText(name)
+    const r = referees?.find((x) => x.name === name)
+    if (!r) return
+    // a fresh copy: mutating the router's own params object left the effect
+    // below unfired after a pick (the render saw the change, React did not)
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('ref', String(r.id))
+      return next
+    }, { replace: true })
+    setText('')
+  }
+  const clear = () =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('ref')
+      return next
+    }, { replace: true })
+
+  return (
+    <div style={themeStyle(refereeTheme())} className="mb-4 rounded-lg border border-line bg-card px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <KitShirt kit={REFEREE_KIT} className="h-6 w-6" />
+        {summary ? (
+          <div className="min-w-0">
+            <div className="text-xs text-muted">Appointed referee</div>
+            <Link
+              to={`/referee/${summary.referee_id}`}
+              className="font-semibold text-ink underline-offset-2 hover:underline"
+            >
+              {summary.name}
+            </Link>
+          </div>
+        ) : (
+          <span className="text-sm text-muted">Appointed referee</span>
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <input
+            list="referee-names"
+            value={text}
+            onChange={(e) => pick(e.target.value)}
+            placeholder={refId === null ? 'Type the appointed referee’s name…' : 'Change referee…'}
+            className="w-64 max-w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink outline-none focus:border-accent-ink"
+          />
+          <datalist id="referee-names">
+            {referees?.map((r) => (
+              <option key={r.id} value={r.name}>
+                {r.matches} matches · last {date(r.last_date)}
+              </option>
+            ))}
+          </datalist>
+          {refId !== null && (
+            <button onClick={clear} title="Clear the appointed referee" className="px-1 text-muted hover:text-ink">
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
+      {refId === null && (
+        <p className="mt-2 text-xs text-faint">
+          Appointments are confirmed about a day before kick-off. Pick him here to see his record.
+        </p>
+      )}
+
+      {summary && (
+        <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">Last N (League)</span>
+            <LastNInput n={n} setN={setN} max={100} />
+          </label>
+          {summary.matches === 0 ? (
+            <p className="text-sm text-muted">
+              No League matches recorded for him.{' '}
+              <Link to={`/referee/${summary.referee_id}`} className="text-accent-ink underline">
+                See every competition
+              </Link>
+            </p>
+          ) : (
+            <>
+              <MiniStat label="Matches" value={String(summary.matches)} />
+              {REFEREE_METRICS.map(([m, l]) => (
+                <MiniStat key={m} label={`${l} / match`} value={summary.rates[m].per_match?.toFixed(2) ?? '—'} />
+              ))}
+              <Link
+                to={`/referee/${summary.referee_id}`}
+                className="ml-auto self-center text-sm text-accent-ink hover:underline"
+              >
+                Full record →
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-sunken px-3 py-1.5">
+      <div className="text-[11px] text-muted">{label}</div>
+      <div className="text-lg font-semibold tabular-nums text-ink">{value}</div>
     </div>
   )
 }

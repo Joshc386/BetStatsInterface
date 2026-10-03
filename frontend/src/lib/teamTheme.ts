@@ -220,6 +220,10 @@ export function themeOf(k: Kit): Theme {
 }
 
 /** A team's kit; any id we hold no colours for (or none at all) gets the pitch. */
+/** The referee's black, for the Referee hub and every referee marker. */
+export const REFEREE_KIT = kit(B, W)
+export const refereeTheme = (): Theme => themeOf(REFEREE_KIT)
+
 export const kitOf = (teamId: number | null | undefined): Kit =>
   (teamId != null && KITS[teamId]) || DEFAULT_KIT
 
