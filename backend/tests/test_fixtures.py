@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models.facts import TeamMatch
-from app.fixtures import fixture_comparison, fixture_detail
+from app.fixtures import fixture_comparison
 
 
 def _a_pair_with_meetings(session) -> tuple[int, int]:
@@ -286,33 +286,5 @@ def test_upcoming_fixtures_window_and_status():
         assert got.competition == "Premier League"
         assert all(r.date >= now for r in rows)
         s.rollback()
-    finally:
-        s.close()
-
-
-def test_fixture_detail_returns_exactly_both_sides():
-    s = SessionLocal()
-    try:
-        home, away = _a_pair_with_meetings(s)
-        fixture_id = s.scalar(
-            select(TeamMatch.fixture_id)
-            .where(TeamMatch.team_id == home, TeamMatch.opponent_id == away)
-            .order_by(TeamMatch.fixture_id)
-            .limit(1)
-        )
-        assert fixture_id is not None, f"{home} v {away} have no meeting to detail"
-        rows = fixture_detail(s, fixture_id=fixture_id)
-
-        assert len(rows) == 2                                  # exactly two sides
-        assert {r.fixture_id for r in rows} == {fixture_id}
-        assert {r.team_id for r in rows} == {home, away}       # the two teams
-    finally:
-        s.close()
-
-
-def test_fixture_detail_unknown_fixture_is_empty():
-    s = SessionLocal()
-    try:
-        assert fixture_detail(s, fixture_id=-1) == []
     finally:
         s.close()

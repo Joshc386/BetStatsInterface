@@ -427,3 +427,22 @@ def test_a_window_with_nothing_recorded_yields_no_rate_not_a_zero():
         assert res["total"] == 0                # sum of an empty set, as before
 
         session.rollback()
+
+
+def test_every_breakdown_row_names_its_fixture():
+    """Every per-game row links to its Match report (CONTEXT.md), so it carries
+    the Fixture it came from: the entity's own row for that fixture must hold
+    the same date and opponent."""
+    with SessionLocal() as s:
+        for entity, table, key, entity_id in (
+            ("team", TeamMatch, TeamMatch.team_id, _a_team_with_data(s)),
+            ("player", PlayerMatch, PlayerMatch.player_id, _a_player_with_data(s)),
+        ):
+            rows = entity_summary(s, entity=entity, entity_id=entity_id, metric="shots", n=5)["breakdown"]
+            assert rows, f"{entity} {entity_id} has no games"
+            for r in rows:
+                fact = s.execute(
+                    select(table.date, table.opponent_id)
+                    .where(key == entity_id, table.fixture_id == r["fixture_id"])
+                ).one()
+                assert (fact.date, fact.opponent_id) == (r["date"], r["opponent_id"])

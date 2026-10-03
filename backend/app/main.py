@@ -18,12 +18,14 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models.facts import Fixture, PlayerMatch, TeamMatch
 from app.models.reference import Competition, Player, Referee, Team
-from app.fixtures import fixture_comparison, fixture_detail, upcoming_fixtures
+from app.fixtures import fixture_comparison, upcoming_fixtures
+from app.match_report import match_report
 from app.referees import METRICS as REFEREE_METRICS, referee_list, referee_summary
 from app.schemas import (
     CompetitionOut,
     FixtureComparison,
     FixtureRow,
+    MatchReport,
     RefereeOut,
     RefereeSummary,
     SearchHit,
@@ -326,12 +328,13 @@ def fixtures_upcoming(
     return [UpcomingFixture.model_validate(r) for r in rows]
 
 
-@app.get("/fixtures/{fixture_id}", response_model=list[FixtureRow])
-def fixture_drilldown(
+@app.get("/fixtures/{fixture_id}/report", response_model=MatchReport)
+def fixture_match_report(
     fixture_id: int, session: Session = Depends(get_session)
-) -> list[FixtureRow]:
-    """Both teams' full team_match rows for one match (the drill-down)."""
-    rows = fixture_detail(session, fixture_id=fixture_id)
-    if not rows:
-        raise HTTPException(404, f"fixture {fixture_id} not found")
-    return [FixtureRow.model_validate(r) for r in rows]
+) -> MatchReport:
+    """The Match report for one finished Fixture (CONTEXT.md). Totals are
+    summed from FBref player rows; score and corners from the team rows."""
+    report = match_report(session, fixture_id=fixture_id)
+    if report is None:
+        raise HTTPException(404, f"no finished fixture {fixture_id}")
+    return MatchReport.model_validate(report)

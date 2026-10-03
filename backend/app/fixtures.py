@@ -139,16 +139,6 @@ def upcoming_fixtures(session: Session, *, days: int = 14):
     return list(session.execute(q).all())
 
 
-def fixture_detail(session: Session, *, fixture_id: int):
-    """Both teams' full team_match rows for one fixture (the drill-down)."""
-    q = (
-        _rows_query()
-        .where(TeamMatch.fixture_id == fixture_id)
-        .order_by(TeamMatch.is_home.desc())  # home side first
-    )
-    return list(session.execute(q).all())
-
-
 def fixture_comparison(
     session: Session,
     *,

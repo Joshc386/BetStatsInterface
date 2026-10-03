@@ -227,25 +227,6 @@ def test_search_hides_a_referee_with_no_recorded_fixture(ref_session):
     assert search(q="Zz Orphaned", limit=20, session=session) == []
 
 
-def test_fixture_detail_rows_name_the_referee(ref_session):
-    from app.fixtures import fixture_detail
-    from app.models.facts import TeamMatch
-
-    session, ref_id, ids = ref_session
-    fixture = session.get(Fixture, ids["a"])
-    for is_home in (True, False):
-        session.add(TeamMatch(
-            fixture_id=fixture.id, competition_id=fixture.competition_id,
-            competition_type="club_league", season=fixture.season, date=fixture.date,
-            team_id=fixture.home_team_id if is_home else fixture.away_team_id,
-            opponent_id=fixture.away_team_id if is_home else fixture.home_team_id,
-            is_home=is_home, source="fbref",
-        ))
-    session.flush()
-    rows = fixture_detail(session, fixture_id=fixture.id)
-    assert {(r.referee_id, r.referee) for r in rows} == {(ref_id, "Zz Synthetic Referee")}
-
-
 def test_summary_endpoint_guards_metric_scope_and_unknown_referee(ref_session):
     from fastapi import HTTPException
 
