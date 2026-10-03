@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.facts import Fixture, TeamMatch
-from app.models.reference import Competition, Team
+from app.models.reference import Competition, Referee, Team
 
 # Every column the client needs to render a fixture row and aggregate any metric.
 _ROW_COLS = (
@@ -53,9 +53,13 @@ def _rows_query():
             *_ROW_COLS,
             opp.canonical_name.label("opponent"),
             Competition.name.label("competition"),
+            Fixture.referee_id,
+            Referee.name.label("referee"),
         )
         .join(opp, opp.id == TeamMatch.opponent_id)
         .join(Competition, Competition.id == TeamMatch.competition_id)
+        .join(Fixture, Fixture.id == TeamMatch.fixture_id)
+        .outerjoin(Referee, Referee.id == Fixture.referee_id)
     )
 
 
