@@ -319,3 +319,44 @@ class MatchReport(BaseModel):
     referee: str | None
     home: MatchSide
     away: MatchSide
+
+
+class LeaderRow(BaseModel):
+    """One player in one Leaderboard list (CONTEXT.md "Leaderboard")."""
+
+    player_id: int
+    player: str
+    team_id: int
+    per90: float  # the ranking figure
+    total: int
+    minutes: int  # over his Recorded Appearances in the club window
+    apps: int
+    carded_apps: int | None  # Cards list only: "carded in X of apps"
+
+
+class AwaitingGame(BaseModel):
+    """A club-window game skipped because its player data has not arrived."""
+
+    fixture_id: int
+    date: dt.datetime
+    opponent: str
+
+
+class LeaderClub(BaseModel):
+    """What one club's window covers, so every row can say so (ADR 0019)."""
+
+    team_id: int
+    team: str
+    games: int  # League games with player data in the window (max 10)
+    min_minutes: int  # half the window
+    competitions: list[str]  # newest first; >1 = crosses divisions
+    awaiting: list[AwaitingGame]
+
+
+class Leaderboard(BaseModel):
+    competition_id: int
+    competition: str
+    season: str
+    window: int
+    clubs: list[LeaderClub]
+    categories: dict[str, list[LeaderRow]]  # Metric -> top 10, best first
