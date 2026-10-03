@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   REFEREE_METRICS, api, type RefereeGame, type RefereeMetric, type RefereeSummary,
 } from '../api'
@@ -8,7 +8,7 @@ import { LastNInput } from '../components/LastNInput'
 import {
   ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
 } from '../components/controls'
-import { EntityLink, teamHref } from '../components/EntityLink'
+import { EntityLink, matchHref, teamHref } from '../components/EntityLink'
 import { Hero, KitShirt } from '../components/Kit'
 import { kitOf, refereeTheme, themeStyle } from '../lib/teamTheme'
 
@@ -336,13 +336,19 @@ function GameRow({ g, metric }: { g: RefereeGame; metric: RefereeMetric }) {
       >
         <td className="py-1.5 pl-3 pr-3 whitespace-nowrap text-muted">{date(g.date)}</td>
         <td className="py-1.5 pr-3 text-ink">
-          <span className="inline-flex items-center gap-1.5">
+          {/* the game opens its Match report; the rest of the row still expands */}
+          <Link
+            to={matchHref(g.fixture_id)!}
+            onClick={(e) => e.stopPropagation()}
+            title="Match report"
+            className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-accent-ink hover:underline"
+          >
             <KitShirt kit={kitOf(g.home_id)} />
             {g.home}
             <span className="text-faint">v</span>
             <KitShirt kit={kitOf(g.away_id)} />
             {g.away}
-          </span>
+          </Link>
         </td>
         <td className="py-1.5 pr-3 text-xs text-faint">{g.competition}</td>
         {REFEREE_METRICS.map(([m]) => (

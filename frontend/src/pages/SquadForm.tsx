@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type SquadAppearanceRow, type SquadForm as SquadFormData } from '../api'
-import { EntityLink, playerHref } from '../components/EntityLink'
+import { EntityLink, matchHref, playerHref } from '../components/EntityLink'
 import { ControlBar, ControlGroup, Field, Toggle, ctrl } from '../components/controls'
 import { summarise, type MetricKind } from '../lib/aggregate'
 import { compareByFigure, membershipLabel } from '../lib/squadMembership'
@@ -339,7 +339,9 @@ function MiniBreakdown({
           <tbody>
             {rows.map((r, i) => (
               <tr key={i} className="border-b border-line-soft last:border-0">
-                <td className="py-1 pr-3 text-muted">{fmtDate(r.date)}</td>
+                <td className="py-1 pr-3 text-muted">
+                  <EntityLink to={matchHref(r.fixture_id)}>{fmtDate(r.date)}</EntityLink>
+                </td>
                 <td className="py-1 pr-3 text-ink-2">{r.opponent}</td>
                 <td className="py-1 pr-3 text-faint">{r.is_home ? 'H' : 'A'}</td>
                 <td className="py-1 pr-3 text-right text-muted">{r.minutes ?? '—'}′</td>

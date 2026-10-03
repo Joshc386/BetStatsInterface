@@ -33,6 +33,7 @@ export interface HitRate {
 }
 
 export interface BreakdownRow {
+  fixture_id: number // links the row to its Match report
   date: string
   opponent_id?: number | null
   opponent: string | null
@@ -161,6 +162,7 @@ export interface SquadMember {
 export interface SquadAppearanceRow {
   player_id: number
   player: string
+  fixture_id: number // links the row to its Match report
   date: string
   season: string
   competition_id: number
@@ -252,6 +254,50 @@ export interface RefereeSummary {
   games: RefereeGame[] // chronological
 }
 
+// The Match report (CONTEXT.md): totals summed from FBref player rows; only the
+// score and corners come from the team row. null = the page did not publish it.
+export interface MatchTotals {
+  goals: number | null
+  assists: number | null
+  shots: number | null
+  sot: number | null
+  tackles: number | null // tackles WON (FBref TklW)
+  fouls_committed: number | null
+  fouls_drawn: number | null
+  yellows: number | null
+  reds: number | null
+  cards: number | null // a two-yellow dismissal is 2 Cards
+}
+
+export interface MatchPlayer extends MatchTotals {
+  player_id: number
+  player: string
+  minutes: number
+  second_yellow: boolean // his red came from a second yellow
+}
+
+export interface MatchSide {
+  team_id: number
+  team: string
+  score: number | null
+  corners: number | null
+  totals: MatchTotals
+  players: MatchPlayer[] // most minutes first
+}
+
+export interface MatchReport {
+  fixture_id: number
+  date: string
+  season: string
+  competition: string
+  competition_type: string
+  stage: string
+  referee_id: number | null
+  referee: string | null
+  home: MatchSide
+  away: MatchSide
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   let res: Response
   try {
@@ -302,8 +348,8 @@ export const api = {
     seasons?.forEach((s) => sp.append('seasons', s))
     return getJSON<RefereeSummary>(`/referees/${id}/summary?${sp}`)
   },
-  fixtureDetail: (fixtureId: number) =>
-    getJSON<FixtureRow[]>(`/fixtures/${fixtureId}`),
+  matchReport: (fixtureId: number) =>
+    getJSON<MatchReport>(`/fixtures/${fixtureId}/report`),
   fixturesUpcoming: (days = 14) =>
     getJSON<UpcomingFixture[]>(`/fixtures/upcoming?days=${days}`),
   squadForm: (teamId: number, cap = 30) =>

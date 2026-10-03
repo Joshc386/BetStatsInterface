@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BreakdownRow(BaseModel):
+    fixture_id: int  # links the row to its Match report
     date: dt.datetime
     opponent_id: int | None = None
     opponent: str | None
@@ -125,6 +126,7 @@ class SquadAppearanceRow(BaseModel):
 
     player_id: int
     player: str
+    fixture_id: int  # links the row to its Match report
     date: dt.datetime
     season: str
     competition_id: int
@@ -270,3 +272,50 @@ class RefereeSummary(BaseModel):
     scope_counts: dict[str, int]  # his matches per Competition Type, all time
     covered_ties_only: bool
     games: list[RefereeGame]  # chronological
+
+
+class MatchTotals(BaseModel):
+    """A side's totals summed from its FBref player rows; None where the page
+    did not publish the Metric (ADR 0016)."""
+
+    goals: int | None
+    assists: int | None
+    shots: int | None
+    sot: int | None
+    tackles: int | None  # tackles WON (FBref TklW)
+    fouls_committed: int | None
+    fouls_drawn: int | None
+    yellows: int | None
+    reds: int | None
+    cards: int | None  # CONTEXT.md "Cards": a two-yellow dismissal is 2
+
+
+class MatchPlayer(MatchTotals):
+    player_id: int
+    player: str
+    minutes: int
+    second_yellow: bool  # 2Y + R: his red came from a second yellow
+
+
+class MatchSide(BaseModel):
+    team_id: int
+    team: str
+    score: int | None  # team row: own goals are credited to no player
+    corners: int | None  # team row: not recorded per player
+    totals: MatchTotals
+    players: list[MatchPlayer]  # most minutes first
+
+
+class MatchReport(BaseModel):
+    """One finished Fixture (CONTEXT.md "Match report")."""
+
+    fixture_id: int
+    date: dt.datetime
+    season: str
+    competition: str
+    competition_type: str
+    stage: str
+    referee_id: int | None
+    referee: str | None
+    home: MatchSide
+    away: MatchSide

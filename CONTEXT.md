@@ -35,6 +35,10 @@ _Avoid_: official (ambiguous with the assistants), ref (UI shorthand only).
 The referee **you** name on the **Fixture view** for a match not yet played — appointments are confirmed about a day before kick-off. A manual step, like confirmed-XI filtering, because no source we use knows the appointment in advance (checked 2026-10-03: ESPN named none of that afternoon's EFL referees an hour before kick-off; FBref's cached schedules name the referee for 644 of 644 played matches and 0 of 2,357 unplayed). Held in the page address only, never stored and never inferred. Once the match is played, the recorded **Referee** from its match page takes over.
 _Avoid_: calling an Appointed referee "the referee" before kick-off — the recorded Referee only exists after the match.
 
+**Match report**:
+The page for one **finished** **Fixture**: score, competition, the recorded **Referee** (linked to his page), both sides' totals, and both squads' **Player-Match** rows. Every total the player rows carry (shots, shots on target, fouls, yellows, reds, **Cards**) is **summed from those rows** (FBref), so the totals always reconcile with the player table and with the Referee's figure for the same Fixture. Only the score and corners come from the **Team-Match** row, because player rows cannot give them: own goals are credited to no player, and corners are not recorded per player. A league total can therefore differ from the team page's row for the same game. Measured 2026-10-03, that happens for 2.7% of league sides on shots and 3.6% on yellows. The difference is always labelled, never reconciled. Every per-game row leads to it: the team, player and Referee game lists, the **Fixture view**'s form and H2H rows, and **Squad form**'s appearance rows. A scheduled Fixture has no Match report; it has the **Fixture view**.
+_Avoid_: "Fixture view" for this page (that is the two-team comparison); "match" as a bare noun.
+
 ### Stats & summaries
 
 **Metric**:
@@ -71,6 +75,14 @@ _Avoid_: line, market.
 The set of past games a Summary Metric is computed over. Selectable two ways:
 - _game-count_ (default) — "last N games", a SQL window function over date-ordered rows.
 - _season_ — "this season" / "last N seasons", a filter over the `season` tag then aggregate.
+
+**Club window**:
+The last N games a club played in a scope, used to rank players on the **Leaderboard**. A player's figures are his **Appearances** inside those games, so a player who missed games simply has fewer minutes. It differs from the player **Rolling Window**, which is his own last N Appearances, so the two give different numbers for the same player. The Leaderboard therefore always says which club window a figure covers ("Leeds' last 10 League games: played 6, 480 min"). It exists because a player's own last 10 can reach back months: on 2026-10-03, 31% of Premier League players with 450+ minutes in their own last 10 League Appearances had not played in 30 days, many of them since last season. It counts only games **with player data**. A game whose team row has arrived but whose **Player-Match** rows have not is skipped, and its absence is labelled ("awaiting player data for today's game v Bolton"). FBref publishes about a day after kick-off, while ESPN team rows land within hours, so a game that counted as missed would understate every player at the club for that day. This is ADR 0016's principle applied to whole games: an unpublished game is not yet known, never a game he missed. It is computed when the page is read, so the game joins the window as soon as its player rows arrive. It is read in League scope like every window, so a promoted club's last 10 can include last season's Championship games. That is always labelled. See `docs/adr/0019`.
+_Avoid_: an unqualified "last 10 games" on the Leaderboard.
+
+**Leaderboard**:
+The top 10 players in one league for each of eight Metrics (shots, shots on target, goals, assists, tackles won, fouls committed, fouls drawn, **Cards**), each over his **Club window** (last 10 League games). Every list is ranked **per 90** over his minutes in that window, Cards included. A player needs at least half the window's minutes (450 for 10) to be ranked. Without that rule, a cameo sub with one shot tops the shots list, and Cards ties are unworkable: 17 Premier League players were level on 3 for tenth place on 2026-10-03. Each row shows the per-90 figure, the total, his minutes and his appearances ("played 8 of 10"), and for Cards also "carded in X of Y". A player is listed under the club of his most recent League **Appearance**, counting only his games for that club, so he appears at most once. Ties go to the player with more minutes. There is one league per board, never pooled, because a per-90 rate in League Two is not comparable with one in the Premier League. It is League scope only.
+_Avoid_: "top players" or "best players". It ranks a rate, not quality.
 
 **Breakdown**:
 The per-game rows underlying a Summary Metric (date, opponent, H/A, Metric value), shown with a footer total/average so the headline and evidence reconcile. It is the source data the headline aggregates, not extra work.
@@ -148,6 +160,7 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 - A **Breakdown** is the set of **Metric** rows a **Summary Metric** aggregates.
 - A **Head-to-Head** is a **Rolling Window** filtered to one opponent; its **Breakdown** is the two teams' past meetings.
 - The **Fixture view** compares two teams by **Team form** (each team's recent Summary Metrics vs all opponents) and **Head-to-Head**; the **Team hub** is one team's full deep-dive. Both are read-only surfaces over the same facts, not stored entities.
+- A finished **Fixture** has one **Match report**, which names at most one **Referee**. Every per-game row (the team, player and Referee game lists, the **Fixture view**'s form and H2H rows, and **Squad form**'s appearance rows) leads to its Fixture's Match report, and the Match report leads back to its Referee. The Match report is also a read-only surface, not a stored entity.
 
 ## Example dialogue
 
@@ -161,3 +174,4 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 - **"Market" vs "Metric"** — the original spec used them interchangeably. Resolved: a **Metric** is the raw stored quantity; a **Summary Metric** is its rolling headline; a **Market** is a bookmaker offering and is out of scope. The threshold object is a **Threshold**, not a "market".
 - **Odds** — the spec stored closing odds (`match_odds`). Resolved: **odds are out of scope entirely** — not modelled and not stored. `match_odds` is dropped from the data model.
 - **"Bookings"** — the spec defined `bookings = yellows + reds`, which double-counts a two-yellow sending-off (`CrdY=2, CrdR=1` → 3). Resolved: store **`yellows`** and **`reds`** raw; the disciplinary unit for hit-rate is **`carded`** = `yellows > 0 OR reds > 0` (a per-game boolean — a player either saw a card or didn't). No stored `bookings`. **Numeric adopted 2026-10-03 as Cards** (see **Cards**) = yellows + reds that did not follow a second yellow, i.e. `yellows + (reds − second_yellows)`. FBref's `summary` does not publish `2CrdY` (the column is empty in every row), but a second-yellow red is derivable: a red on a player with 2 yellows.
+- **"Fixture page"** — used loosely for both the two-team comparison and the page for one played game. Resolved 2026-10-03: the **Fixture view** compares two teams (usually before kick-off); the **Match report** is one finished Fixture's record. They are never called by each other's name.

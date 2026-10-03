@@ -6,7 +6,7 @@ import { LastNInput } from '../components/LastNInput'
 import {
   ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
 } from '../components/controls'
-import { EntityLink, teamHref } from '../components/EntityLink'
+import { EntityLink, matchHref, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 import { Hero, KitShirt } from '../components/Kit'
 import { kitOf, teamTheme, themeStyle } from '../lib/teamTheme'
@@ -405,7 +405,7 @@ function FlatBreakdown({
           <tr key={i} className="border-b border-line-soft last:border-0 hover:bg-sunken">
             <td className="py-1.5 pl-3 pr-3 text-muted">{date(r.date)}</td>
             <td className="py-1.5 pr-3">
-              <ResultChip result={r.result} />
+              <ResultChip result={r.result} to={matchHref(r.fixture_id)} />
             </td>
             <td className="py-1.5 pr-3 text-ink">
               <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>

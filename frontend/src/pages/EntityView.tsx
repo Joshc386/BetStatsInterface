@@ -4,7 +4,7 @@ import { api, type Entity, type SearchHit, type Summary, type UpcomingFixture } 
 import { useCatalogue } from '../useCatalogue'
 import { SingleSquad } from './SquadForm'
 import { LastNInput } from '../components/LastNInput'
-import { EntityLink, teamHref } from '../components/EntityLink'
+import { EntityLink, matchHref, teamHref } from '../components/EntityLink'
 import { ResultChip, ValueBar, barFraction } from '../components/ResultChip'
 import {
   ControlBar, ControlGroup, Field, HitRate, Stat, Toggle, ctrl, sampleNote,
@@ -470,7 +470,7 @@ function Breakdown({ summary: s, isPlayer }: { summary: Summary; isPlayer: boole
                 {new Date(r.date).toLocaleDateString('en-GB')}
               </td>
               <td className="py-1.5 pr-3">
-                <ResultChip result={r.result} />
+                <ResultChip result={r.result} to={matchHref(r.fixture_id)} />
               </td>
               <td className="py-1.5 pr-3 text-ink">
                 <EntityLink to={teamHref(r.opponent_id)}>{r.opponent ?? '—'}</EntityLink>

@@ -75,6 +75,7 @@ def entity_summary(
     attr, kind = registry(entity)[metric]
     opp = aliased(Team)
     cols = [
+        table.fixture_id,  # every game row links to its Match report
         table.date,
         table.is_home,
         table.opponent_id.label("opponent_id"),
@@ -226,6 +227,7 @@ def entity_summary(
         "hit_rate": hit_rate,
         "breakdown": [
             {
+                "fixture_id": r.fixture_id,
                 "date": r.date,
                 "opponent_id": r.opponent_id,
                 "opponent": r.opponent,

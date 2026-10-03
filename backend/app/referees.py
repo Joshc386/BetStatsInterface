@@ -31,7 +31,7 @@ SCOPE_LABELS = {
 # CONTEXT.md "Cards": every yellow, plus every red that did NOT follow a second
 # yellow — at most 2 per player. FBref writes a two-yellow dismissal as 2Y + 1R
 # and never publishes 2CrdY, so a red on a player with 2 yellows IS that red.
-_CARDS = (
+CARDS = (
     PlayerMatch.yellows
     + PlayerMatch.reds
     - case(((PlayerMatch.reds > 0) & (PlayerMatch.yellows >= 2), 1), else_=0)
@@ -80,7 +80,7 @@ def _side_totals(session, fixture_ids) -> dict[tuple[int, bool], dict]:
         select(
             PlayerMatch.fixture_id,
             PlayerMatch.is_home,
-            func.sum(_CARDS).label("cards"),
+            func.sum(CARDS).label("cards"),
             func.sum(PlayerMatch.yellows).label("yellows"),
             func.sum(PlayerMatch.reds).label("reds"),
             func.sum(PlayerMatch.fouls_committed).label("fouls"),
