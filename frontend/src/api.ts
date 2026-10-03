@@ -6,7 +6,7 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 export type Entity = 'team' | 'player'
 
 export interface SearchHit {
-  entity: Entity
+  entity: Entity | 'referee'
   id: number
   name: string
 }
@@ -101,6 +101,9 @@ export interface FixtureRow {
   btts: boolean | null
   clean_sheet: boolean | null
   result: string | null
+  // the recorded Referee from the match page (ADR 0018); null when it named none
+  referee_id?: number | null
+  referee?: string | null
 }
 
 export interface FixtureComparison {
@@ -191,6 +194,64 @@ export interface SquadForm {
   rows: SquadAppearanceRow[]
 }
 
+// Referee hub (mirrors backend RefereeSummary; docs/adr/0018). Match totals,
+// both sides summed from FBref player rows — not the team pages' convention.
+export type RefereeMetric = 'cards' | 'yellows' | 'reds' | 'fouls'
+
+/** A referee's four headline Metrics, in display order. */
+export const REFEREE_METRICS: Array<[RefereeMetric, string]> = [
+  ['cards', 'Cards'],
+  ['yellows', 'Yellows'],
+  ['reds', 'Reds'],
+  ['fouls', 'Fouls'],
+]
+
+export interface RefereeOut {
+  id: number
+  name: string
+  matches: number
+  last_date: string
+}
+
+export interface RefereeRate {
+  total: number
+  recorded: number // matches whose page published the metric (ADR 0016)
+  per_match: number | null
+}
+
+export type RefereeSide = Record<RefereeMetric, number | null>
+
+export interface RefereeGame extends RefereeSide {
+  fixture_id: number
+  date: string
+  season: string
+  competition: string
+  competition_type: string
+  home_id: number
+  home: string
+  away_id: number
+  away: string
+  home_side: RefereeSide
+  away_side: RefereeSide
+}
+
+export interface RefereeSummary {
+  referee_id: number
+  name: string
+  metric: RefereeMetric
+  scope: string
+  scope_label: string
+  window: string
+  matches: number
+  rates: Record<RefereeMetric, RefereeRate>
+  home_rates: Record<RefereeMetric, number | null>
+  away_rates: Record<RefereeMetric, number | null>
+  hit_rate: HitRate | null
+  scope_counts: Record<string, number> // his matches per competition_type, all time
+  covered_ties_only: boolean
+  games: RefereeGame[] // chronological
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   let res: Response
   try {
@@ -234,6 +295,12 @@ export const api = {
     const sp = new URLSearchParams({ home: String(home), away: String(away), n: String(n) })
     scopes.forEach((s) => sp.append('scope', s)) // form-window scopes; H2H is always all scopes
     return getJSON<FixtureComparison>(`/fixtures/compare?${sp}`)
+  },
+  referees: () => getJSON<RefereeOut[]>('/referees'),
+  refereeSummary: (id: number, params: Record<string, string>, seasons?: string[]) => {
+    const sp = new URLSearchParams(params)
+    seasons?.forEach((s) => sp.append('seasons', s))
+    return getJSON<RefereeSummary>(`/referees/${id}/summary?${sp}`)
   },
   fixtureDetail: (fixtureId: number) =>
     getJSON<FixtureRow[]>(`/fixtures/${fixtureId}`),

@@ -54,6 +54,7 @@ from ingestion.players import (
     parse_player_ids,
     parse_team_ids,
 )
+from ingestion.referees import record_referee
 
 # CLI selector -> (Competition row name, soccerdata league key). Several
 # selectors can feed ONE competition: all WC qualifying confederations + the
@@ -220,6 +221,7 @@ def backfill_international_season(
                     session, competition, game["season"], home, away,
                     game["date"], game_id, stage=game["stage"],
                 )
+                record_referee(session, fixture, html)  # ADR 0018
                 n = ingest_match(
                     session, fixture, competition.type, df, parse_player_ids(html)
                 )

@@ -100,6 +100,10 @@ class FixtureRow(BaseModel):
     btts: bool | None
     clean_sheet: bool | None
     result: str | None
+    # The recorded Referee from the match page (ADR 0018); None when the page
+    # named none or the Fixture predates referee capture.
+    referee_id: int | None = None
+    referee: str | None = None
 
 
 class SquadMember(BaseModel):
@@ -203,3 +207,66 @@ class UpcomingFixture(BaseModel):
     home_name: str
     away_id: int
     away_name: str
+
+
+class RefereeOut(BaseModel):
+    """One referee in the Appointed-referee picker, most recently active first."""
+
+    id: int
+    name: str
+    matches: int
+    last_date: dt.datetime
+
+
+class RefereeRate(BaseModel):
+    total: int
+    # Matches whose page published this Metric — what per_match divided by
+    # (ADR 0016); can be fewer than the window's `matches`.
+    recorded: int
+    per_match: float | None
+
+
+class RefereeSide(BaseModel):
+    cards: int | None
+    yellows: int | None
+    reds: int | None
+    fouls: int | None
+
+
+class RefereeGame(BaseModel):
+    """One refereed Fixture: match totals plus each side's split."""
+
+    fixture_id: int
+    date: dt.datetime
+    season: str
+    competition: str
+    competition_type: str
+    home_id: int
+    home: str
+    away_id: int
+    away: str
+    cards: int | None
+    yellows: int | None
+    reds: int | None
+    fouls: int | None
+    home_side: RefereeSide
+    away_side: RefereeSide
+
+
+class RefereeSummary(BaseModel):
+    """A referee's window: match-total rates from FBref player rows (ADR 0018)."""
+
+    referee_id: int
+    name: str
+    metric: str
+    scope: str
+    scope_label: str
+    window: str
+    matches: int
+    rates: dict[str, RefereeRate]  # cards / yellows / reds / fouls
+    home_rates: dict[str, float | None]  # home side's per-match share
+    away_rates: dict[str, float | None]
+    hit_rate: HitRate | None
+    scope_counts: dict[str, int]  # his matches per Competition Type, all time
+    covered_ties_only: bool
+    games: list[RefereeGame]  # chronological

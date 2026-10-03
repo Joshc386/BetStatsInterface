@@ -28,3 +28,6 @@ export const teamHref = (id: number | null | undefined) =>
 
 export const playerHref = (id: number | null | undefined) =>
   id === null || id === undefined ? null : `/player/${id}`
+
+export const refereeHref = (id: number | null | undefined) =>
+  id === null || id === undefined ? null : `/referee/${id}`

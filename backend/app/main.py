@@ -16,13 +16,16 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models.facts import PlayerMatch, TeamMatch
-from app.models.reference import Competition, Player, Team
+from app.models.facts import Fixture, PlayerMatch, TeamMatch
+from app.models.reference import Competition, Player, Referee, Team
 from app.fixtures import fixture_comparison, fixture_detail, upcoming_fixtures
+from app.referees import METRICS as REFEREE_METRICS, referee_list, referee_summary
 from app.schemas import (
     CompetitionOut,
     FixtureComparison,
     FixtureRow,
+    RefereeOut,
+    RefereeSummary,
     SearchHit,
     SquadAppearanceRow,
     SquadForm,
@@ -119,9 +122,18 @@ def search(q: str = Query(min_length=2), limit: int = 20,
     players = session.execute(
         select(Player.id, Player.canonical_name).where(Player.canonical_name.ilike(like)).limit(limit)
     ).all()
+    # only referees with a recorded Fixture: an alias added later leaves its old
+    # spelling's row behind with nothing pointing at it
+    refereed = select(Fixture.id).where(Fixture.referee_id == Referee.id).exists()
+    referees = session.execute(
+        select(Referee.id, Referee.name)
+        .where(Referee.name.ilike(like), refereed)
+        .limit(limit)
+    ).all()
     return (
         [SearchHit(entity="team", id=i, name=n) for i, n in teams]
         + [SearchHit(entity="player", id=i, name=n) for i, n in players]
+        + [SearchHit(entity="referee", id=i, name=n) for i, n in referees]
     )
 
 
@@ -184,6 +196,39 @@ def player_summary(
     return _summary("player", player_id, metric, n, competition_id, scope, seasons,
                     threshold, direction, window_mode, session, team_id=team_id,
                     min_minutes=min_minutes, is_home=is_home, opponent_id=opponent_id)
+
+
+@app.get("/referees", response_model=list[RefereeOut])
+def referees(session: Session = Depends(get_session)) -> list[RefereeOut]:
+    """Every referee with a recorded Fixture, most recently active first —
+    feeds the Appointed-referee picker on the Fixture view."""
+    return [RefereeOut(**r) for r in referee_list(session)]
+
+
+@app.get("/referees/{referee_id}/summary", response_model=RefereeSummary)
+def referee_summary_endpoint(
+    referee_id: int,
+    metric: str = "cards",
+    n: int = Query(10, ge=1, le=100),
+    seasons: list[str] | None = Query(None, description="season tags (e.g. 2526); omit for last-N window"),
+    scope: str = Query("club_league", description="a competition_type, or 'all'"),
+    threshold: float | None = None,
+    direction: str = Query("over", pattern="^(over|under)$"),
+    session: Session = Depends(get_session),
+) -> RefereeSummary:
+    """A referee's match-total rates over one window, from FBref player rows
+    (ADR 0018). League by default, like the player view (CONTEXT.md)."""
+    if metric not in REFEREE_METRICS:
+        raise HTTPException(404, f"unknown referee metric '{metric}'. One of {REFEREE_METRICS}.")
+    if scope != "all" and scope not in SCOPES:
+        raise HTTPException(422, f"unknown scope '{scope}'. One of {SCOPES} or 'all'.")
+    result = referee_summary(
+        session, referee_id=referee_id, metric=metric, n=n, seasons=seasons or None,
+        scope=scope, threshold=threshold, direction=direction,
+    )
+    if result is None:
+        raise HTTPException(404, f"referee {referee_id} not found")
+    return RefereeSummary(**result)
 
 
 @app.get("/teams/{team_id}/squad-form", response_model=SquadForm)
