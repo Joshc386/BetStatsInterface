@@ -101,6 +101,7 @@ def _member_rows_at_club(
         select(
             PlayerMatch.player_id,
             Player.canonical_name.label("player"),
+            PlayerMatch.fixture_id,  # each game row links to its Match report
             PlayerMatch.date,
             PlayerMatch.season,
             PlayerMatch.competition_id,

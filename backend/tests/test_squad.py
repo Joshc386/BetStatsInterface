@@ -131,3 +131,20 @@ def test_last_seen_is_the_players_date_at_THIS_club():
                 )
             )
             assert here is not None and here == m["last_seen"]
+
+
+def test_every_appearance_row_names_its_fixture():
+    """Each Squad form game row links to its Match report (CONTEXT.md), so it
+    carries the Fixture its Player-Match row came from."""
+    with SessionLocal() as s:
+        team = _wolves(s)
+        rows = squad_form(s, team_id=team.id)["rows"]
+        assert rows, "Wolves have no appearance rows"
+        for r in rows[:20]:
+            fact = s.execute(
+                select(PlayerMatch.date, PlayerMatch.opponent_id).where(
+                    PlayerMatch.player_id == r.player_id,
+                    PlayerMatch.fixture_id == r.fixture_id,
+                )
+            ).one()
+            assert (fact.date, fact.opponent_id) == (r.date, r.opponent_id)

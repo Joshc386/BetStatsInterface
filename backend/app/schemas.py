@@ -126,6 +126,7 @@ class SquadAppearanceRow(BaseModel):
 
     player_id: int
     player: str
+    fixture_id: int  # links the row to its Match report
     date: dt.datetime
     season: str
     competition_id: int

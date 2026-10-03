@@ -162,6 +162,7 @@ export interface SquadMember {
 export interface SquadAppearanceRow {
   player_id: number
   player: string
+  fixture_id: number // links the row to its Match report
   date: string
   season: string
   competition_id: number
