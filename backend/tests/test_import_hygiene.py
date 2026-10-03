@@ -26,6 +26,7 @@ ENTRY_POINTS = [
     "ingestion.run_backfill",
     "ingestion.cups",
     "ingestion.team_match",
+    "ingestion.referees",
     "app.main",
 ]
 
