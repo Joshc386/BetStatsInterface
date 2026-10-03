@@ -21,6 +21,20 @@ _Avoid_: assuming a league Team-Match came from football-data.co.uk.
 **Player-Match**:
 One player's perspective on a **Fixture** — i.e. an **Appearance** (minutes > 0). 0–N per side per Fixture. The unit a player **Rolling Window** iterates over.
 
+**Referee**:
+The official named as *Referee* on a **Fixture**'s match page — not the assistants, fourth official or VAR. A referee **Rolling Window** runs over the Fixtures he refereed, and his **Metrics** are **match totals**, both sides summed (Leeds 3 yellows + Burnley 2 = 5), with the home/away split shown beneath.
+
+His cards and fouls are summed from both sides' **Player-Match** rows (FBref), in every scope — the same page that names him. FBref counts **every booking** (a two-yellow dismissal is 2 yellows + 1 red), so a referee's figure for a Fixture can differ from that Fixture's **Team-Match** figure, which follows football-data.co.uk's convention (1 red, 0 yellows — see **Metric**). Deliberate: a referee page is about what he did, and the league team convention hides exactly the bookings that make a referee card-heavy (measured 2026-09-29: sources disagree on yellows for 3.6% of league team-sides, 88% of those with a red). Always labelled on the page, never silently reconciled.
+
+Identity is the **name as the match page prints it** — no source gives a referee id — plus a **hand-confirmed alias list** for one man printed two ways ("Sam Allison" on 5 pages, "Samuel Allison" on 171). Never merged on a fuzzy match: a near-duplicate (same surname, short or initialled first name, accents) is listed for review, never decided — the same stance as player and ESPN names, where a bare-surname rung once read ESPN's "Tom King" as our Joshua King. Identical-looking pairs are not presumed one person either: Andy and Bobby (Robert) Madley are brothers and both referee.
+
+Captured for **every Fixture we hold, in every scope**, but his window is read **League-only by default** — the player view's default, for the same reason: "4+ yellows in 7 of his last 10" must not quietly include a cup tie or a Nations League game. Cups, Europe, International and All are explicit, labelled choices. A referee seen only in **Covered ties** abroad (UEFA appoints neutral referees, so a Polish referee appears only in his ties involving English clubs) is shown as covered-ties-only, never implied to be his record.
+_Avoid_: official (ambiguous with the assistants), ref (UI shorthand only).
+
+**Appointed referee**:
+The referee **you** name on the **Fixture view** for a match not yet played — appointments are confirmed about a day before kick-off. A manual step, like confirmed-XI filtering, because no source we use knows the appointment in advance (checked 2026-10-03: ESPN named none of that afternoon's EFL referees an hour before kick-off; FBref's cached schedules name the referee for 644 of 644 played matches and 0 of 2,357 unplayed). Held in the page address only, never stored and never inferred. Once the match is played, the recorded **Referee** from its match page takes over.
+_Avoid_: calling an Appointed referee "the referee" before kick-off — the recorded Referee only exists after the match.
+
 ### Stats & summaries
 
 **Metric**:
@@ -37,6 +51,10 @@ A **Metric** summarised over a **Rolling Window**. Computed at query time, never
 - _hit-rate_ — count of games whose Metric value clears a **Threshold**, expressed as "x of N (%)".
 
 Every mode divides by **Recorded Appearances**, never by all Appearances: *a sparse row shrinks the sample rather than scoring zero.* So the denominator is **metric-dependent** — the same window gives shots a smaller sample than goals if some of its pages omitted the shot columns — and it is always published beside the figure it produced, the way hit-rate has always shown its own "of N". A window therefore reports two counts that are both true and need not match: the **Appearances** in it, and the Recorded Appearances the number was actually computed over (`docs/adr/0016`).
+
+**Cards**:
+The overall card count: every yellow, plus every red that did **not** come from a second yellow — so a player counts **at most 2**. A two-yellow dismissal is 2 cards (both yellows); its red "ticks the box" — it counts in the **reds** figure, which counts every sending-off — but is never added to Cards again. A straight red is 1; a yellow followed by a straight red is 2. Read from **Player-Match** rows: FBref records a two-yellow dismissal as 2 yellows + 1 red (715 of 715 league rows with 2 yellows carry a red), so a red on a player with 2 yellows *is* a second-yellow red. Consequence: in a match with a second-yellow dismissal, yellows + reds exceeds Cards by one per such dismissal — by design. A **Referee**'s headline rates are Cards, yellows, reds and fouls.
+_Avoid_: "bookings" (see Flagged ambiguities), adding yellows and reds to get a card count.
 
 **Appearance**:
 A single game in which a player played > 0 minutes — i.e. a game with a `player_match` row (FBref records no row for a player who did not feature). The player **Rolling Window** counts appearances, not team fixtures: "last 5 games" means his last 5 appearances. `minutes` is displayed per game and as a window total; the minutes value distinguishes a start from a cameo (no separate start flag is stored).
@@ -123,6 +141,7 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 
 - A **Fixture** has exactly two **Team-Match** rows and 0–N **Player-Match** rows per side.
 - A **Team-Match** / **Player-Match** belongs to exactly one **Fixture**.
+- A **Fixture** has at most one **Referee**; a **Referee** has refereed many **Fixtures**. His **Rolling Window** iterates over those Fixtures (match totals), not over Team-Match rows.
 - A **Summary Metric** is computed from one **Metric** over one **Rolling Window**.
 - A **Summary Metric** in hit-rate mode requires one **Threshold**; in aggregate mode it requires none.
 - Every **Metric** row carries a **Competition Type** and a `season`; a **Rolling Window** is always read within a Competition Type scope.
@@ -141,4 +160,4 @@ _Avoid_: using "market" to mean a Metric or a Summary Metric.
 
 - **"Market" vs "Metric"** — the original spec used them interchangeably. Resolved: a **Metric** is the raw stored quantity; a **Summary Metric** is its rolling headline; a **Market** is a bookmaker offering and is out of scope. The threshold object is a **Threshold**, not a "market".
 - **Odds** — the spec stored closing odds (`match_odds`). Resolved: **odds are out of scope entirely** — not modelled and not stored. `match_odds` is dropped from the data model.
-- **"Bookings"** — the spec defined `bookings = yellows + reds`, which double-counts a two-yellow sending-off (`CrdY=2, CrdR=1` → 3). Resolved: store **`yellows`** and **`reds`** raw; the disciplinary unit for hit-rate is **`carded`** = `yellows > 0 OR reds > 0` (a per-game boolean — a player either saw a card or didn't). No stored `bookings`. A numeric is deferred; if added, `cards_shown = yellows + (reds − second_yellows)` using FBref's `2CrdY` to avoid the double-count.
+- **"Bookings"** — the spec defined `bookings = yellows + reds`, which double-counts a two-yellow sending-off (`CrdY=2, CrdR=1` → 3). Resolved: store **`yellows`** and **`reds`** raw; the disciplinary unit for hit-rate is **`carded`** = `yellows > 0 OR reds > 0` (a per-game boolean — a player either saw a card or didn't). No stored `bookings`. **Numeric adopted 2026-10-03 as Cards** (see **Cards**) = yellows + reds that did not follow a second yellow, i.e. `yellows + (reds − second_yellows)`. FBref's `summary` does not publish `2CrdY` (the column is empty in every row), but a second-yellow red is derivable: a red on a player with 2 yellows.
