@@ -84,6 +84,7 @@ class Fixture(Base):
         Index("ix_fixtures_status_date", "status", "date"),
         Index("ix_fixtures_comp_season", "competition_id", "season"),
         Index("ix_fixtures_referee_date", "referee_id", "date"),
+        Index("ix_fixtures_espn_event_id", "espn_event_id"),
     )
 
 
@@ -151,6 +152,7 @@ class TeamMatch(Base):
         Index("ix_team_match_team_scope_date", "team_id", "competition_type", "date"),
         Index("ix_team_match_h2h", "team_id", "opponent_id", "date"),
         Index("ix_team_match_team_season", "team_id", "season"),
+        Index("ix_team_match_source_fixture", "source", "fixture_id"),
     )
 
 
